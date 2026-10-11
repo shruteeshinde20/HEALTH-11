@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HEALTH-11 · Emergency Evac Graph</title>
+<style>
+:root{color-scheme:light;--bg:#F8FAFC;--card:#fff;--line:#E2E8F0;--pri:#7DB8E8;--ok:#BFE8D0;--warn:#FCE9B2;--bad:#F9C5C5;--tx:#334155;--tx2:#64748B;--ink:#1E3A5F;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.55 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+.app{display:flex;min-height:100vh}
+nav{width:210px;background:#fff;border-right:1px solid var(--line);padding:16px 10px;position:sticky;top:0;height:100vh;overflow:auto;flex:none}
+nav b{display:block;color:var(--ink);font-size:15px;padding:4px 10px 14px}
+nav a{display:block;padding:7px 10px;border-radius:8px;color:var(--tx);text-decoration:none;margin-bottom:2px}
+nav a:hover{background:var(--bg)}nav a.on{background:var(--pri);color:var(--ink);font-weight:600}
+main{flex:1;min-width:0;padding:22px 28px;max-width:1100px}
+.note{background:var(--warn);border-radius:8px;padding:7px 12px;margin-bottom:16px;font-size:12.5px;color:#5b4a14}
+h1{font-size:22px;color:var(--ink);margin:0 0 4px}h2{font-size:15px;color:var(--ink);margin:0 0 10px}
+.sub{color:var(--tx2);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 1px 2px rgba(51,65,85,.05)}
+.g{display:grid;gap:14px}.g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.big{font-size:26px;color:var(--ink);font-weight:600}.sm{color:var(--tx2);font-size:12.5px}
+.btn{background:var(--pri);color:var(--ink);border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn.l{background:#fff;border:1px solid var(--line);color:var(--tx);font-weight:500}
+.btn:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.wrap{overflow-x:auto}table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}th{color:var(--tx2);font-weight:500;font-size:12.5px}
+.tag{padding:2px 9px;border-radius:99px;font-size:12px;color:var(--ink)}.t-ok{background:var(--ok)}.t-w{background:var(--warn)}.t-b{background:var(--bad)}.t-p{background:#D6E9F8}
+label{display:block;color:var(--tx2);font-size:12.5px;margin:10px 0 4px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;color:var(--tx);background:#fff}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.row>div{flex:1;min-width:140px}
+svg text{font:11px Inter,system-ui,sans-serif;fill:var(--tx)}
+.msg{padding:9px 12px;border-radius:10px;margin:8px 0;max-width:82%}.me{background:#D6E9F8;margin-left:auto}.ai{background:#fff;border:1px solid var(--line)}
+.hero{text-align:center;padding:50px 10px}.hero h1{font-size:34px}.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:28px;text-align:left}
+@media(max-width:760px){.app{display:block}nav{width:auto;height:auto;position:static;display:flex;overflow-x:auto;gap:4px;padding:8px;border-right:0;border-bottom:1px solid var(--line)}nav b{display:none}nav a{white-space:nowrap;margin:0}main{padding:16px}}
+</style></head><body>
+<div class="app"><nav id="nav" aria-label="Pages"></nav><main id="main" tabindex="-1"></main></div>
+<script>
+const P=[["landing","Landing"],["login","Login / Register"],["dash","Dashboard"],["fac","Facility Manager"],["graph","Graph Builder"],["scen","Scenario Builder"],["live","Live Simulation"],["cmp","Algorithm Comparison"],["pat","Patients & Staff"],["ai","AI Assistant"],["rep","Reports & History"],["admin","Admin"],["set","Settings / Profile"]];
+const tb=(h,r)=>`<div class="wrap"><table><tr>${h.map(x=>`<th>${x}</th>`).join("")}</tr>${r.map(x=>`<tr>${x.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</table></div>`;
+const tg=(t,c)=>`<span class="tag t-${c}">${t}</span>`;
+const stat=(n,l)=>`<div class="card"><div class="big">${n}</div><div class="sm">${l}</div></div>`;
+const head=(t,s)=>`<h1>${t}</h1><p class="sub">${s}</p>`;
+// sample graph (the PROJECT.md test case)
+const N={ICU:[50,150,"icu"],C1:[160,70,"corridor"],WardA:[160,150,"ward"],C2:[160,230,"corridor"],S1:[300,40,"stair"],R1:[300,100,"ramp"],E1:[440,70,"exit"],S2:[300,200,"stair"],R2:[300,260,"ramp"],E2:[440,230,"exit"]};
+const E=[["ICU","C1",10],["C1","S1",12],["S1","E1",20],["C1","R1",18],["R1","E1",15],["ICU","C2",14],["C1","WardA",8],["WardA","C2",12],["C2","S2",10],["S2","E2",25],["C2","R2",16],["R2","E2",20]];
+const EX=["E1","E2"];
+function adj(blk,mob){const a={};for(const k in N)a[k]=[];for(const[x,y,d]of E){const bad=n=>blk.includes(n)||(mob!="walk"&&N[n][2]=="stair");if(bad(x)||bad(y))continue;a[x].push([y,d]);a[y].push([x,d])}return a}
+function len(p){let s=0;for(let i=1;i<p.length;i++)s+=E.find(e=>(e[0]==p[i-1]&&e[1]==p[i])||(e[1]==p[i-1]&&e[0]==p[i]))[2];return s}
+function solve(alg,from,blk,mob){const a=adj(blk,mob);if(blk.includes(from))return null;
+if(alg=="Dijkstra"){const D={[from]:0},prev={},q=[from],done={};while(q.length){q.sort((x,y)=>D[x]-D[y]);const u=q.shift();if(done[u])continue;done[u]=1;for(const[v,d]of a[u])if(D[v]===undefined||D[u]+d<D[v]){D[v]=D[u]+d;prev[v]=u;q.push(v)}}
+const g=EX.filter(x=>D[x]!==undefined).sort((x,y)=>D[x]-D[y])[0];if(!g)return null;const p=[g];while(p[0]!=from)p.unshift(prev[p[0]]);return p}
+if(alg=="BFS"){const q=[[from]],seen={[from]:1};while(q.length){const p=q.shift(),u=p[p.length-1];if(EX.includes(u))return p;for(const[v]of a[u])if(!seen[v]){seen[v]=1;q.push([...p,v])}}return null}
+const seen={};(function go(p){const u=p[p.length-1];if(EX.includes(u))return p;seen[u]=1;for(const[v]of a[u])if(!seen[v]){const r=go([...p,v]);if(r)return r}return null});
+function dfs(p){const u=p[p.length-1];if(EX.includes(u))return p;seen[u]=1;for(const[v]of a[u])if(!seen[v]){const r=dfs([...p,v]);if(r)return r}return null}
+return dfs([from])}
+function svg(path,blk,sel){const on=(x,y)=>path&&path.some((n,i)=>i&&((path[i-1]==x&&n==y)||(path[i-1]==y&&n==x)));
+let s=`<svg viewBox="0 0 500 290" width="100%" role="img" aria-label="Hospital floor graph">`;
+for(const[x,y,d]of E){const A=N[x],B=N[y];s+=`<line x1="${A[0]}" y1="${A[1]}" x2="${B[0]}" y2="${B[1]}" stroke="${on(x,y)?"#5FA3D9":"#CBD5E1"}" stroke-width="${on(x,y)?5:2}"/><text x="${(A[0]+B[0])/2+4}" y="${(A[1]+B[1])/2-4}" style="fill:#94A3B8">${d}</text>`}
+for(const k in N){const[x,y,t]=N[k],b=blk.includes(k),c=b?"#F9C5C5":t=="exit"?"#BFE8D0":t=="stair"||t=="ramp"?"#FCE9B2":t=="icu"||t=="ward"?"#D6E9F8":"#fff";
+s+=`<circle cx="${x}" cy="${y}" r="17" fill="${c}" stroke="${sel==k?"#1E3A5F":"#94A3B8"}" stroke-width="${sel==k?2.5:1.2}"/><text x="${x}" y="${y+4}" text-anchor="middle">${k}</text>`}
+return s+"</svg>"}
+const V={
+landing:()=>`<div class="hero"><h1>Smarter Paths. Safer People. Healthier Tomorrows.</h1><p class="sub" style="max-width:520px;margin:10px auto 20px">Plan hospital evacuations before an emergency happens, and see the safest route when one does.</p><a class="btn" href="#login" style="text-decoration:none;display:inline-block">Log in</a>
+<div class="steps"><div class="card"><h2>Map</h2><p class="sm">Draw your floors, wards, stairs and exits as a simple graph.</p></div><div class="card"><h2>Simulate</h2><p class="sm">Start a fire or hazard and watch routes change and bottlenecks appear.</p></div><div class="card"><h2>Evacuate</h2><p class="sm">Get a clear plan and report your team can act on.</p></div></div></div>`,
+login:()=>`<div class="card" style="max-width:380px;margin:40px auto"><h2>Log in to HEALTH-11</h2><label>Email</label><input type="email" placeholder="name@hospital.org"><label>Password</label><input type="password"><label>Role</label><select><option>Emergency Commander</option><option>Administrator</option><option>Staff User</option></select><p><button class="btn" style="width:100%" onclick="location.hash='dash'">Log in</button></p><p class="sm">New here? <a href="#login">Create an account</a></p></div>`,
+dash:()=>head("Dashboard","Where your hospital stands right now.")+`<div class="g g4">${stat("3","Hospitals")}${stat("2","Active scenarios")}${stat("4m 20s","Last evacuation time")}${stat("1","Bottleneck found")}</div><div class="g g2" style="margin-top:14px"><div class="card"><h2>Recent simulations</h2>${tb(["Scenario","Algorithm","Time","Status"],[["Fire at C1","Dijkstra","4m 20s",tg("Done","ok")],["Smoke ICU","A*","3m 05s",tg("Done","ok")],["Hazmat Lab","BFS","6m 40s",tg("Bottleneck","w")]])}<p><button class="btn" onclick="location.hash='scen'">Run new simulation</button></p></div><div class="card"><h2>Alerts</h2><p>${tg("Needs data","w")} Alerts appear after 50 simulation runs.</p></div></div>`,
+fac:()=>head("Facility Manager","Hospitals, buildings and floors.")+`<div class="card"><div class="row" style="justify-content:space-between"><h2>Hospitals</h2><div><button class="btn l">Import CSV / GeoJSON</button> <button class="btn">Add hospital</button></div></div>${tb(["Name","Buildings","Floors","City",""],[["KEM Hospital","2","6","Pune","<a href='#graph'>Open map</a>"],["Sassoon General","3","9","Pune","<a href='#graph'>Open map</a>"],["Ruby Hall Clinic","1","5","Pune","<a href='#graph'>Open map</a>"]])}</div>`,
+graph:()=>head("Graph Builder","Add rooms and paths, then save the floor.")+`<div class="g g2" style="grid-template-columns:2fr 1fr"><div class="card">${svg(null,[],"C1")}<p class="sm">Numbers are path lengths in metres. Stairs and ramps are yellow, exits green.</p></div><div class="card"><h2>Selected: C1</h2><label>Type</label><select><option>corridor</option></select><label>Capacity</label><input value="20"><label>Blocked</label><select><option>No</option><option>Yes</option></select><p class="row"><button class="btn">Save</button><button class="btn l">Add node</button></p></div></div>`,
+scen:()=>head("Scenario Builder","Three steps: hazard, place, severity.")+`<div class="card" style="max-width:560px"><label>1. Hazard type</label><select><option>Fire</option><option>Smoke</option><option>Hazmat</option><option>Structural</option></select><label>2. Where does it start?</label><select><option>C1 (corridor)</option><option>ICU</option><option>WardA</option></select><label>3. Severity and spread</label><input type="range" min="1" max="10" value="6"><p class="row"><button class="btn l">Save scenario</button><button class="btn" onclick="location.hash='live'">Save and run</button></p></div>`,
+live:()=>head("Live Simulation","Pick who is evacuating and see the safest route.")+`<div class="g g2" style="grid-template-columns:2fr 1fr"><div class="card" id="map"></div><div class="card"><label>Start</label><select id="st"><option>ICU</option><option>WardA</option></select><label>Patient type</label><select id="mb"><option value="walk">Walking</option><option value="str">Stretcher (no stairs)</option></select><label><input type="checkbox" id="bl" style="width:auto"> Fire blocks corridor C1</label><p><button class="btn" onclick="run()">Run</button></p><div id="out" class="sm"></div></div></div>`,
+cmp:()=>head("Algorithm Comparison","Same scenario, four ways to find a route.")+`<div class="card"><div class="row"><div><label>Start</label><select id="cs" onchange="cmp()"><option>WardA</option><option>ICU</option></select></div><div><label>Fire at C1</label><select id="cb" onchange="cmp()"><option value="">No</option><option value="C1">Yes</option></select></div></div><div id="ct"></div></div>`,
+pat:()=>head("Patients & Staff","Sample records are labelled synthetic.")+`<div class="card"><div class="row"><div><input placeholder="Search name or ward"></div><div><select><option>All mobility</option><option>Stretcher</option><option>Wheelchair</option><option>Walking</option></select></div><div><button class="btn">Add patient</button></div></div>${tb(["ID","Mobility","Criticality","Location","Priority"],[["P-001","Stretcher","High","ICU",tg("Evacuate first","b")],["P-014","Wheelchair","Medium","WardA",tg("Second","w")],["P-022","Walking","Low","WardA",tg("Third","ok")]])}</div>`,
+ai:()=>head("AI Assistant","Describe the emergency in your own words.")+`<div class="card"><div class="msg me">Fire in corridor C1, evacuate ICU and WardA</div><div class="msg ai">I found everything you mentioned. Check the scenario below, then run it.<br><br>${tg("Fire","b")} origin C1 · groups ICU, WardA<br><span class="sm">Predicted evacuation time: about 4 min (see "About this prediction")</span><p><button class="btn" onclick="location.hash='live'">Run it</button></p></div><div class="row"><div><input placeholder="Describe the emergency"></div><div style="flex:none;min-width:0"><button class="btn">Send</button></div></div></div>`,
+rep:()=>head("Reports & History","Every run is saved and can be downloaded.")+`<div class="card">${tb(["Date","Scenario","Time","Bottleneck","Download"],[["11 Oct","Fire at C1","4m 20s","Corridor C2","<a href='#rep'>PDF</a> · <a href='#rep'>CSV</a>"],["10 Oct","Smoke ICU","3m 05s","None","<a href='#rep'>PDF</a> · <a href='#rep'>CSV</a>"]])}<h2 style="margin-top:18px">Recommendation</h2><p>Corridor C2 carries both groups. Send stretchers first, then walking patients 30 seconds later.</p></div>`,
+admin:()=>head("Admin","Users, roles and the audit log.")+`<div class="g g2"><div class="card"><h2>Users</h2>${tb(["Name","Role"],[["Asha","Administrator"],["Ravi","Emergency Commander"],["Meera","Staff User"]])}</div><div class="card"><h2>Audit log</h2>${tb(["Who","What"],[["Ravi","Created scenario Fire at C1"],["Asha","Changed walking speed"]])}</div></div>`,
+set:()=>head("Settings / Profile","Your details and simulation speeds.")+`<div class="g g2"><div class="card"><h2>Profile</h2><label>Name</label><input value="Ravi"><label>Email</label><input value="ravi@hospital.org"><p><button class="btn">Save</button></p></div><div class="card"><h2>Speeds (m/s)</h2>${tb(["Type","Speed","Source"],[["Walking","1.2","assumed"],["Wheelchair","0.8","assumed"],["Stretcher","0.5","assumed"]])}</div></div>`};
+function run(){const f=st.value,m=mb.value,b=bl.checked?["C1"]:[],p=solve("Dijkstra",f,b,m);map.innerHTML=svg(p,b,f);
+out.innerHTML=p?`<b>Route:</b> ${p.join(" → ")}<br><b>Distance:</b> ${len(p)} m<br><b>Time:</b> about ${Math.round(len(p)/(m=="walk"?1.2:0.5))} s`:`<span class="tag t-b">No safe route</span> Every path to an exit is blocked for this patient type.`}
+function cmp(){const f=cs.value,b=cb.value?[cb.value]:[];ct.innerHTML=tb(["Algorithm","Route","Distance"],["BFS","DFS","Dijkstra"].map(a=>{const p=solve(a,f,b,"walk");return[a,p?p.join(" → "):"No route",p?len(p)+" m":"-"]}))+`<p class="sm">BFS counts steps, DFS takes the first path it finds, Dijkstra finds the shortest.</p>`}
+function show(){const k=(location.hash||"#landing").slice(1),v=V[k]?k:"landing";nav.innerHTML="<b>HEALTH-11</b>"+P.map(([i,n])=>`<a href="#${i}" class="${i==v?"on":""}">${n}</a>`).join("");
+main.innerHTML=`<div class="note">Design preview with sample data. It will connect to your real backend and database when built.</div>`+V[v]();if(v=="live"){map.innerHTML=svg(null,[],null)}if(v=="cmp")cmp();main.scrollTo&&scrollTo(0,0)}
+addEventListener("hashchange",show);show();
+</script></body></html>

@@ -1,0 +1,4 @@
+﻿SQLAlchemy==2.0.41
+alembic==1.16.4
+psycopg[binary]==3.2.9
+python-dotenv==1.1.1
