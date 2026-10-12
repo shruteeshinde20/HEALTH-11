@@ -20,7 +20,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -52,6 +52,13 @@ class ImportedNode(BaseModel):
     y: FiniteFloat = 0.0
     capacity: Annotated[int, Field(ge=0, le=100_000)] = 0
     is_blocked: bool = False
+    is_evacuation_lift: bool = False
+
+    @model_validator(mode="after")
+    def _evacuation_lift_is_a_lift(self):
+        if self.is_evacuation_lift and self.type != NodeType.LIFT:
+            raise ValueError("Only a lift can be an evacuation lift")
+        return self
 
 
 class ImportedEdge(BaseModel):
@@ -108,6 +115,7 @@ def _parse_csv(text: str) -> dict:
                 "y": float(row.get("y") or 0),
                 "capacity": int(row.get("capacity") or 0),
                 "is_blocked": _parse_bool(row.get("is_blocked") or "false"),
+                "is_evacuation_lift": _parse_bool(row.get("is_evacuation_lift") or "false"),
             })
         elif kind == "edge":
             edges.append({
@@ -150,6 +158,7 @@ def _parse_geojson(payload: Any) -> dict:
                 "y": coordinates[1],
                 "capacity": properties.get("capacity", 0),
                 "is_blocked": properties.get("is_blocked", False),
+                "is_evacuation_lift": properties.get("is_evacuation_lift", False),
             })
         elif kind == "edge" and geometry.get("type") == "LineString":
             edges.append({
@@ -352,6 +361,7 @@ def export_floor(
         "y": node.y,
         "capacity": node.capacity,
         "is_blocked": node.is_blocked,
+        "is_evacuation_lift": node.is_evacuation_lift,
     } for node in nodes]
 
     edge_records = [{
@@ -395,8 +405,8 @@ def export_floor(
         output = io.StringIO()
         fields = [
             "record_type", "name", "type", "x", "y", "capacity",
-            "is_blocked", "from_node", "to_node", "distance", "width",
-            "max_flow", "wheelchair_accessible", "stretcher_accessible",
+            "is_blocked", "is_evacuation_lift", "from_node", "to_node", "distance",
+            "width", "max_flow", "wheelchair_accessible", "stretcher_accessible",
         ]
         writer = csv.DictWriter(output, fieldnames=fields)
         writer.writeheader()

@@ -39,8 +39,9 @@ from app.audit import record_audit
 from app.db_session import get_db
 from app.models.facility import Floor
 from app.models.graph import VERTICAL_NODE_TYPES, Edge, Node, NodeType
-from app.models.operations import Hazard, Patient, Staff
+from app.models.operations import Hazard, Patient, Scenario, Staff
 from app.permissions import Editor, Reader
+from app.services.scenario_inputs import building_nodes_and_edges, scenario_hazard_context
 from app.services.routing import (
     InvalidRouteRequest,
     NoRouteError,
@@ -72,6 +73,7 @@ class NodeCreate(BaseModel):
     y: FiniteFloat = 0.0
     capacity: Capacity = 0
     is_blocked: bool = False
+    is_evacuation_lift: bool = False
 
 
 class NodeUpdate(BaseModel):
@@ -82,6 +84,7 @@ class NodeUpdate(BaseModel):
     y: FiniteFloat | None = None
     capacity: Capacity | None = None
     is_blocked: bool | None = None
+    is_evacuation_lift: bool | None = None
 
 
 class NodeOut(BaseModel):
@@ -95,8 +98,12 @@ class NodeOut(BaseModel):
     y: float
     capacity: int
     is_blocked: bool
+    is_evacuation_lift: bool
     created_at: datetime
     updated_at: datetime
+
+
+EVACUATION_LIFT_ONLY = "Only a node of type 'lift' can be an evacuation lift"
 
 
 class EdgeCreate(BaseModel):
@@ -149,6 +156,9 @@ class RouteRequest(BaseModel):
     destination: Annotated[int, Field(gt=0, strict=True)] | Name(150) | None = None
     mobility: str = "ambulatory"
     algorithm: str = "astar"
+    # Optional: route around the hazards of a scenario at a given time.
+    scenario_id: Id | None = None
+    minutes_elapsed: Annotated[float, Field(ge=0, le=1440, allow_inf_nan=False)] = 0.0
 
 
 class RouteOut(BaseModel):
@@ -156,8 +166,12 @@ class RouteOut(BaseModel):
     node_names: list[str]
     floor_ids: list[int]
     distance_metres: float
+    risk_cost_metres: float
     algorithm: str
     mobility: str
+    scenario_id: int | None
+    minutes_elapsed: float
+    lifts_disabled: bool
 
 
 def _audit(db, user, request, action, entity_type, entity_id, details=None):
@@ -234,6 +248,8 @@ def get_node(node_id: int, db: Db, user: Reader):
 
 @router.post("/nodes", response_model=NodeOut, status_code=status.HTTP_201_CREATED)
 def create_node(payload: NodeCreate, db: Db, user: Editor, request: Request):
+    if payload.is_evacuation_lift and payload.type != NodeType.LIFT:
+        raise HTTPException(status_code=422, detail=EVACUATION_LIFT_ONLY)
     require_reference(db, Floor, payload.floor_id, user.organization_id, "Floor")
     node = Node(organization_id=user.organization_id, **payload.model_dump())
     db.add(node)
@@ -249,6 +265,10 @@ def update_node(node_id: int, payload: NodeUpdate, db: Db, user: Editor, request
     node = get_active(db, Node, node_id, user.organization_id, "Node")
     changes = changes_from(payload, not_null=set(NodeUpdate.model_fields))
     new_type = changes.get("type")
+    final_type = new_type or node.type
+    final_flag = changes.get("is_evacuation_lift", node.is_evacuation_lift)
+    if final_flag and final_type != NodeType.LIFT:
+        raise HTTPException(status_code=422, detail=EVACUATION_LIFT_ONLY)
     if (
         new_type is not None
         and new_type not in VERTICAL_NODE_TYPES
@@ -387,35 +407,6 @@ def get_floor_graph(floor_id: int, db: Db, user: Reader):
     return FloorGraphOut(floor_id=floor_id, nodes=nodes, edges=edges)
 
 
-def _building_nodes_and_edges(db: Session, building_id: int, organization_id: int):
-    """All active nodes and edges of a building (every floor), so routes can
-    use stairs, ramps and lifts between floors."""
-    floor_ids = select(Floor.id).where(
-        Floor.organization_id == organization_id,
-        Floor.building_id == building_id,
-        Floor.deleted_at.is_(None),
-    )
-    nodes = list(db.scalars(
-        select(Node).where(
-            Node.organization_id == organization_id,
-            Node.floor_id.in_(floor_ids),
-            Node.deleted_at.is_(None),
-        ).order_by(Node.id)
-    ).all())
-    node_ids = [node.id for node in nodes]
-    edges = []
-    if node_ids:
-        edges = list(db.scalars(
-            select(Edge).where(
-                Edge.organization_id == organization_id,
-                Edge.from_node_id.in_(node_ids),
-                Edge.to_node_id.in_(node_ids),
-                Edge.deleted_at.is_(None),
-            ).order_by(Edge.id)
-        ).all())
-    return nodes, edges
-
-
 @router.post("/floors/{floor_id}/route", response_model=RouteOut)
 def calculate_evacuation_route(floor_id: int, payload: RouteRequest, db: Db, user: Reader):
     """Route from a node on this floor, through the whole building.
@@ -425,19 +416,25 @@ def calculate_evacuation_route(floor_id: int, payload: RouteRequest, db: Db, use
     to the nearest usable exit in the building.
     """
     floor = get_active(db, Floor, floor_id, user.organization_id, "Floor")
-    nodes, edges = _building_nodes_and_edges(db, floor.building_id, user.organization_id)
+    nodes, edges = building_nodes_and_edges(db, floor.building_id, user.organization_id)
+    hazard = None
+    if payload.scenario_id is not None:
+        require_reference(db, Scenario, payload.scenario_id, user.organization_id, "Scenario")
+        hazard, _ = scenario_hazard_context(
+            db, user.organization_id, payload.scenario_id, nodes, edges, payload.minutes_elapsed,
+        )
     try:
         if payload.destination is None:
             result = nearest_safe_exit(
                 nodes, edges, payload.start,
                 mobility=payload.mobility, algorithm=payload.algorithm,
-                start_floor_id=floor_id,
+                start_floor_id=floor_id, hazard=hazard,
             )
         else:
             result = find_route(
                 nodes, edges, payload.start, payload.destination,
                 mobility=payload.mobility, algorithm=payload.algorithm,
-                start_floor_id=floor_id,
+                start_floor_id=floor_id, hazard=hazard,
             )
     except (InvalidRouteRequest, NoRouteError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -446,6 +443,10 @@ def calculate_evacuation_route(floor_id: int, payload: RouteRequest, db: Db, use
         node_names=result.node_names,
         floor_ids=result.floor_ids,
         distance_metres=result.distance_metres,
+        risk_cost_metres=result.risk_cost_metres,
         algorithm=result.algorithm,
         mobility=payload.mobility.lower(),
+        scenario_id=payload.scenario_id,
+        minutes_elapsed=payload.minutes_elapsed,
+        lifts_disabled=bool(hazard and hazard.lifts_disabled),
     )

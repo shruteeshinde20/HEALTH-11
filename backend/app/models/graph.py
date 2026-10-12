@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    false,
     func,
     text,
 )
@@ -50,6 +51,10 @@ class Node(TenantMixin, TimestampMixin, Base):
             unique=True, postgresql_where=ACTIVE,
         ),
         CheckConstraint("capacity >= 0", name="ck_node_capacity_nonnegative"),
+        CheckConstraint(
+            "is_evacuation_lift = false OR type = 'lift'",
+            name="ck_node_evacuation_lift_type",
+        ),
         Index("ix_node_org_floor", "organization_id", "floor_id"),
     )
 
@@ -63,6 +68,11 @@ class Node(TenantMixin, TimestampMixin, Base):
     y: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # A protected lift that may still be used during a fire or smoke
+    # emergency. Ordinary lifts are not used in those scenarios.
+    is_evacuation_lift: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
 
 
 class Edge(TenantMixin, TimestampMixin, Base):
