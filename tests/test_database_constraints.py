@@ -122,19 +122,24 @@ def test_every_model_accepts_valid_insert_and_read(db_session):
         role="nurse",
         node_id=node_a.id,
     )
-    hazard = Hazard(
-        organization_id=org.id,
-        name="Test Fire",
-        type=HazardType.FIRE,
-        origin_node_id=node_a.id,
-        spread_rate=0.5,
-        severity=2,
-    )
+    # Hazards belong to a scenario (PROJECT.md: "scenarios (with hazards)"),
+    # so the scenario is created first and the hazard is attached to it.
     scenario = Scenario(
         organization_id=org.id,
         name="Fire Drill",
         description="Test scenario",
         created_by_user_id=user.id,
+    )
+    db_session.add(scenario)
+    db_session.flush()
+    hazard = Hazard(
+        organization_id=org.id,
+        scenario_id=scenario.id,
+        name="Test Fire",
+        type=HazardType.FIRE,
+        origin_node_id=node_a.id,
+        spread_rate=0.5,
+        severity=2,
     )
     parameter = Parameter(
         organization_id=org.id,
@@ -145,7 +150,7 @@ def test_every_model_accepts_valid_insert_and_read(db_session):
     )
 
     db_session.add_all(
-        [edge, patient, staff, hazard, scenario, parameter]
+        [edge, patient, staff, hazard, parameter]
     )
     db_session.flush()
 

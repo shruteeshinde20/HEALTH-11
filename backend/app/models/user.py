@@ -1,10 +1,10 @@
-﻿from datetime import datetime
+from datetime import datetime
 import enum
 
 from sqlalchemy import (
     DateTime,
     Enum,
-    ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     UniqueConstraint,
@@ -25,6 +25,7 @@ class UserRole(str, enum.Enum):
 class User(TenantMixin, TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
+        UniqueConstraint("organization_id", "id", name="uq_users_org_id"),
         # One active account per email inside an organization. Soft-deleted
         # users do not block the email from being reused.
         Index(
@@ -58,13 +59,16 @@ class RefreshToken(TenantMixin, TimestampMixin, Base):
     __tablename__ = "refresh_tokens"
     __table_args__ = (
         UniqueConstraint("jti", name="uq_refresh_tokens_jti"),
+        ForeignKeyConstraint(
+            ["organization_id", "user_id"],
+            ["users.organization_id", "users.id"],
+            name="fk_refresh_tokens_user", ondelete="CASCADE",
+        ),
         Index("ix_refresh_tokens_org_user", "organization_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
-    )
+    user_id: Mapped[int] = mapped_column(nullable=False)
     jti: Mapped[str] = mapped_column(String(36), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

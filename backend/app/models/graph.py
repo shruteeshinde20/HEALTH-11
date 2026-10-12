@@ -5,15 +5,19 @@ from sqlalchemy import (
     CheckConstraint,
     Enum,
     Float,
-    ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
     UniqueConstraint,
+    func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base, TenantMixin, TimestampMixin
+
+ACTIVE = text("deleted_at IS NULL")
 
 
 class NodeType(str, enum.Enum):
@@ -28,18 +32,29 @@ class NodeType(str, enum.Enum):
     ASSEMBLY = "assembly"
 
 
+# Node types allowed at both ends of an edge that connects two floors.
+VERTICAL_NODE_TYPES = frozenset({NodeType.STAIR, NodeType.RAMP, NodeType.LIFT})
+
+
 class Node(TenantMixin, TimestampMixin, Base):
     __tablename__ = "nodes"
     __table_args__ = (
-        UniqueConstraint("floor_id", "name", name="uq_node_floor_name"),
+        UniqueConstraint("organization_id", "id", name="uq_nodes_org_id"),
+        ForeignKeyConstraint(
+            ["organization_id", "floor_id"],
+            ["floors.organization_id", "floors.id"],
+            name="fk_nodes_floor", ondelete="RESTRICT",
+        ),
+        Index(
+            "uq_node_floor_name", "floor_id", "name",
+            unique=True, postgresql_where=ACTIVE,
+        ),
         CheckConstraint("capacity >= 0", name="ck_node_capacity_nonnegative"),
         Index("ix_node_org_floor", "organization_id", "floor_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    floor_id: Mapped[int] = mapped_column(
-        ForeignKey("floors.id", ondelete="RESTRICT"), nullable=False, index=True
-    )
+    floor_id: Mapped[int] = mapped_column(nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     type: Mapped[NodeType] = mapped_column(
         Enum(NodeType, name="node_type", values_callable=lambda enum_cls: [member.value for member in enum_cls]), nullable=False
@@ -51,23 +66,37 @@ class Node(TenantMixin, TimestampMixin, Base):
 
 
 class Edge(TenantMixin, TimestampMixin, Base):
+    """An undirected connection between two nodes (A-B is the same as B-A)."""
+
     __tablename__ = "edges"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "from_node_id"],
+            ["nodes.organization_id", "nodes.id"],
+            name="fk_edges_from_node", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "to_node_id"],
+            ["nodes.organization_id", "nodes.id"],
+            name="fk_edges_to_node", ondelete="RESTRICT",
+        ),
         CheckConstraint("distance >= 0", name="ck_edge_distance_nonnegative"),
         CheckConstraint("width > 0", name="ck_edge_width_positive"),
         CheckConstraint("max_flow > 0", name="ck_edge_max_flow_positive"),
-        UniqueConstraint("from_node_id", "to_node_id", name="uq_edge_direction"),
+        CheckConstraint("from_node_id <> to_node_id", name="ck_edge_distinct_nodes"),
+        Index(
+            "uq_edge_node_pair",
+            func.least(text("from_node_id"), text("to_node_id")),
+            func.greatest(text("from_node_id"), text("to_node_id")),
+            unique=True, postgresql_where=ACTIVE,
+        ),
         Index("ix_edge_org_from", "organization_id", "from_node_id"),
         Index("ix_edge_org_to", "organization_id", "to_node_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    from_node_id: Mapped[int] = mapped_column(
-        ForeignKey("nodes.id", ondelete="RESTRICT"), nullable=False
-    )
-    to_node_id: Mapped[int] = mapped_column(
-        ForeignKey("nodes.id", ondelete="RESTRICT"), nullable=False
-    )
+    from_node_id: Mapped[int] = mapped_column(nullable=False)
+    to_node_id: Mapped[int] = mapped_column(nullable=False)
     distance: Mapped[float] = mapped_column(Float, nullable=False)
     width: Mapped[float] = mapped_column(Float, nullable=False)
     max_flow: Mapped[int] = mapped_column(Integer, nullable=False)
