@@ -128,6 +128,27 @@ Rules worth knowing:
   patients, staff or hazards are placed on it.
 - An organization always keeps at least one active Administrator.
 
+## Routing
+
+`POST /api/v1/floors/{floor_id}/route` with
+`{"start": <node id or name>, "destination": <optional>, "mobility": "...", "algorithm": "..."}`.
+Without `destination` the route goes to the nearest usable exit. Routes use
+the whole building, so they can go down stairs, ramps or lifts; the response
+lists `node_names`, `floor_ids` and `distance_metres`.
+
+| Mobility | Cannot use |
+|---|---|
+| `ambulatory` | blocked nodes or edges only |
+| `wheelchair` | stairs; edges not marked `wheelchair_accessible` |
+| `stretcher`, `ventilator` | stairs; edges not marked `stretcher_accessible` |
+
+| Algorithm | What it finds |
+|---|---|
+| `bfs` | the route with the fewest steps (not always the shortest distance) |
+| `dfs` | the first route found (no guarantee of being short) |
+| `dijkstra` | the shortest distance |
+| `astar` | the shortest distance, using node positions to search faster |
+
 ## Roles
 
 | Role (API value)      | Access |

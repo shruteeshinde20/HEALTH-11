@@ -154,8 +154,10 @@ class RouteRequest(BaseModel):
 class RouteOut(BaseModel):
     node_ids: list[int]
     node_names: list[str]
+    floor_ids: list[int]
     distance_metres: float
     algorithm: str
+    mobility: str
 
 
 def _audit(db, user, request, action, entity_type, entity_id, details=None):
@@ -385,26 +387,65 @@ def get_floor_graph(floor_id: int, db: Db, user: Reader):
     return FloorGraphOut(floor_id=floor_id, nodes=nodes, edges=edges)
 
 
+def _building_nodes_and_edges(db: Session, building_id: int, organization_id: int):
+    """All active nodes and edges of a building (every floor), so routes can
+    use stairs, ramps and lifts between floors."""
+    floor_ids = select(Floor.id).where(
+        Floor.organization_id == organization_id,
+        Floor.building_id == building_id,
+        Floor.deleted_at.is_(None),
+    )
+    nodes = list(db.scalars(
+        select(Node).where(
+            Node.organization_id == organization_id,
+            Node.floor_id.in_(floor_ids),
+            Node.deleted_at.is_(None),
+        ).order_by(Node.id)
+    ).all())
+    node_ids = [node.id for node in nodes]
+    edges = []
+    if node_ids:
+        edges = list(db.scalars(
+            select(Edge).where(
+                Edge.organization_id == organization_id,
+                Edge.from_node_id.in_(node_ids),
+                Edge.to_node_id.in_(node_ids),
+                Edge.deleted_at.is_(None),
+            ).order_by(Edge.id)
+        ).all())
+    return nodes, edges
+
+
 @router.post("/floors/{floor_id}/route", response_model=RouteOut)
 def calculate_evacuation_route(floor_id: int, payload: RouteRequest, db: Db, user: Reader):
-    get_active(db, Floor, floor_id, user.organization_id, "Floor")
-    nodes, edges = _floor_nodes_and_edges(db, floor_id, user.organization_id)
+    """Route from a node on this floor, through the whole building.
+
+    `start` (and `destination`, if given) is a node ID or exact name. A name
+    is looked up on this floor first. Without `destination`, the route goes
+    to the nearest usable exit in the building.
+    """
+    floor = get_active(db, Floor, floor_id, user.organization_id, "Floor")
+    nodes, edges = _building_nodes_and_edges(db, floor.building_id, user.organization_id)
     try:
         if payload.destination is None:
             result = nearest_safe_exit(
                 nodes, edges, payload.start,
                 mobility=payload.mobility, algorithm=payload.algorithm,
+                start_floor_id=floor_id,
             )
         else:
             result = find_route(
                 nodes, edges, payload.start, payload.destination,
                 mobility=payload.mobility, algorithm=payload.algorithm,
+                start_floor_id=floor_id,
             )
     except (InvalidRouteRequest, NoRouteError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return RouteOut(
         node_ids=result.node_ids,
         node_names=result.node_names,
+        floor_ids=result.floor_ids,
         distance_metres=result.distance_metres,
         algorithm=result.algorithm,
+        mobility=payload.mobility.lower(),
     )
