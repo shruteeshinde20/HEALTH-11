@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.ai_api import router as ai_router
 from app.analysis_api import router as analysis_router
+from app.assistant_api import router as assistant_router
 from app.audit_api import router as audit_router
 from app.auth import router as auth_router
 from app.facility_api import router as facility_router
@@ -25,6 +26,7 @@ router.include_router(analysis_router)
 router.include_router(simulation_router)
 router.include_router(simulation_ws_router)
 router.include_router(ai_router)
+router.include_router(assistant_router)
 router.include_router(parameter_router)
 router.include_router(users_router)
 router.include_router(audit_router)

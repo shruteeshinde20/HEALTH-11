@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import field_validator, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # backend/app/config.py -> project root. Using an absolute path means the
@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # Where trained machine-learning models are stored (one folder per organization).
     model_dir: Path = PROJECT_ROOT / "var" / "models"
+
+    # AI assistant (Anthropic API). Both must be set in .env; never in code.
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str | None = None
+    assistant_timeout_seconds: float = 30.0
+    assistant_max_requests_per_user: int = 20
+    assistant_window_seconds: int = 600
 
     # Rate limits (stored in PostgreSQL, so they hold across server workers).
     rate_limit_window_seconds: int = 900

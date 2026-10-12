@@ -26,3 +26,8 @@ numpy==2.4.6
 pandas==3.0.6
 joblib==1.6.0
 scipy==1.17.1
+
+# AI assistant (official Anthropic Python SDK). Version verified by installing
+# on the project's Windows / Python 3.11 environment; it brings its own HTTP
+# client (httpx2) and did not change any version pinned above.
+anthropic==1.13.0

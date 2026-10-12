@@ -240,6 +240,36 @@ Priority parameters (defaults "assumed, to be validated"): weights
 `priority_weight_hazard` 0.3; mobility factors ambulatory 0, wheelchair 0.5,
 stretcher 0.8, ventilator 1.0; `priority_hazard_distance_m` 50.
 
+## AI assistant (Anthropic Claude)
+
+| Endpoint | What it does | Who |
+|---|---|---|
+| `POST /assistant {text, floor_id}` | Turns a plain-language description ("fire in Ward A, spreading fast") into a **draft** scenario `{scenario: {name, description, hazards}}`, or asks a question `{clarification, unknown_names}` | Administrator, Emergency Commander |
+| `POST /assistant/summary {run_id}` | Plain-language summary of a saved simulation run, `{summary, source, note, facts}` | everyone |
+
+Safety rules built in:
+
+- The model sees only your text and the place names of the selected floor.
+  Every place in its answer is matched against the database (exact, or
+  case-insensitive when only one place matches). Anything unknown, ambiguous or
+  out of range becomes a question — never a guess.
+- A draft is never saved or run. "Run it" uses the normal `POST /scenarios`
+  and `POST /simulate` endpoints with their usual checks.
+- A summary is written only from the run's stored results. If it contains a
+  figure that is not in those results, a standard summary is shown instead
+  (`source: "standard"`).
+- Your text is not stored; the audit log keeps only its length.
+- Limited to `ASSISTANT_MAX_REQUESTS_PER_USER` (default 20) requests per user per
+  `ASSISTANT_WINDOW_SECONDS` (default 600).
+
+Setup: put `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` in `.env` (never in code or
+chat). Without them the endpoints answer `503` with an explanation. Check the
+setup with one real (billed) request — the key is never printed:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_assistant.py
+```
+
 ## Roles
 
 | Role (API value)      | Access |
