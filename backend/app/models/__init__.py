@@ -1,4 +1,4 @@
-from app.models.facility import Building, Floor, Hospital
+﻿from app.models.facility import Building, Floor, Hospital
 from app.models.graph import Edge, Node, NodeType
 from app.models.operations import (
     Hazard,
@@ -16,7 +16,7 @@ from app.models.simulation import (
     Parameter,
     SimulationRun,
 )
-from app.models.user import User, UserRole
+from app.models.user import RefreshToken, User, UserRole
 
 __all__ = [
     "AuditLog",
@@ -32,6 +32,7 @@ __all__ = [
     "NodeType",
     "Organization",
     "Parameter",
+    "RefreshToken",
     "Patient",
     "PatientMobility",
     "Scenario",
@@ -40,3 +41,4 @@ __all__ = [
     "User",
     "UserRole",
 ]
+
