@@ -80,6 +80,42 @@ SPECS = {
             "simulation_frame_seconds", 5.0, "s", 1.0, 600.0,
             "How often the saved timeline records a snapshot.",
         ),
+        ParameterSpec(
+            "predictor_min_runs", 30.0, "runs", 10.0, 100_000.0,
+            "Complete simulation runs needed before the time predictor is trained.",
+        ),
+        ParameterSpec(
+            "priority_weight_mobility", 0.4, "weight", 0.0, 1.0,
+            "Weight of mobility in the patient priority score.",
+        ),
+        ParameterSpec(
+            "priority_weight_criticality", 0.3, "weight", 0.0, 1.0,
+            "Weight of clinical criticality in the patient priority score.",
+        ),
+        ParameterSpec(
+            "priority_weight_hazard", 0.3, "weight", 0.0, 1.0,
+            "Weight of closeness to the hazard in the patient priority score.",
+        ),
+        ParameterSpec(
+            "priority_mobility_ambulatory", 0.0, "0-1", 0.0, 1.0,
+            "Mobility factor for patients who can walk.",
+        ),
+        ParameterSpec(
+            "priority_mobility_wheelchair", 0.5, "0-1", 0.0, 1.0,
+            "Mobility factor for wheelchair users.",
+        ),
+        ParameterSpec(
+            "priority_mobility_stretcher", 0.8, "0-1", 0.0, 1.0,
+            "Mobility factor for stretcher patients.",
+        ),
+        ParameterSpec(
+            "priority_mobility_ventilator", 1.0, "0-1", 0.0, 1.0,
+            "Mobility factor for ventilated patients.",
+        ),
+        ParameterSpec(
+            "priority_hazard_distance_m", 50.0, "m", 1.0, 10_000.0,
+            "Patients at the hazard get the full hazard factor; it falls to 0 at this distance.",
+        ),
     )
 }
 

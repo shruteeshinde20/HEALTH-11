@@ -10,3 +10,5 @@ __pycache__/
 htmlcov/
 dist/
 build/
+# Trained ML model files (generated at runtime, per organization)
+var/

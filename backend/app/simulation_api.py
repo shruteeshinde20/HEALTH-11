@@ -35,6 +35,7 @@ from app.models.facility import Building, Hospital
 from app.models.operations import HazardType, Scenario
 from app.models.simulation import SimulationRun
 from app.permissions import Editor, Reader
+from app.services import ml
 from app.services import simulation_runner as runner
 from app.services.routing import ALGORITHMS
 
@@ -114,6 +115,8 @@ def simulate(payload: SimulateRequest, db: Db, user: Editor, request: Request):
             "values": values,
             "parameters_used": runner.parameters_used(params),
             "injected_hazards": [],
+            # Inputs as numbers, used to train the evacuation-time predictor.
+            "features": ml.features(snapshot, [], payload.algorithm, values),
         },
         results=results,
         status="completed",
@@ -187,7 +190,8 @@ def add_hazard_to_run(run_id: int, payload: InjectedHazard, db: Db, user: Editor
     injected.append(hazard)
     results = runner.run_and_report(snapshot, injected, run.algorithm, run.params["values"])
     # New dict objects so SQLAlchemy saves the JSON changes.
-    run.params = {**run.params, "injected_hazards": injected}
+    run.params = {**run.params, "injected_hazards": injected,
+                  "features": ml.features(snapshot, injected, run.algorithm, run.params["values"])}
     run.results = results
     run.updated_at = func.now()
     record_audit(db, organization_id=user.organization_id, actor_user_id=user.id,

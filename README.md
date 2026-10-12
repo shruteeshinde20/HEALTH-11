@@ -216,6 +216,30 @@ Set real, sourced values in `/parameters`; every run lists the values and
 sources it used. Not modelled: alarm/pre-movement delay, crowd density inside
 corridors, slower movement on stairs, staff helping patients.
 
+## AI features
+
+| Feature | Endpoint | What it is | Who |
+|---|---|---|---|
+| Evacuation-time predictor | `POST /predict {scenario_id, building_id?, algorithm?}` → `{predicted_time_s, method, mae, r2, note, about}` | scikit-learn random-forest regression trained on **your organization's own complete simulation runs** — a fast surrogate for the simulator, not a measurement of real evacuations. Accuracy (MAE, R²) is measured on 25% of runs held out from training and compared with always guessing the average. | Administrator, Emergency Commander |
+| Patient priority | `GET /patient_priority?scenario_id=&building_id=` | Rule-based weighted score (not ML): mobility, criticality and walking distance to the hazard, with the full breakdown per patient. | everyone |
+| Unusual-run alerts | `GET /alerts` → `{message, alerts: [{run_id, reason, kind}]}` | scikit-learn IsolationForest on evacuation time, highest corridor queue and blocked nodes, plus bottleneck and safety alerts from recent runs. | everyone |
+
+Honesty rules built in:
+
+- The predictor returns `predicted_time_s: null` with a note when there are
+  fewer than `predictor_min_runs` (default 30) complete runs, when nobody is
+  placed, or when someone has no safe route at the start.
+- Only runs where everyone was evacuated are used for training.
+- Unusual-run detection needs at least 50 runs and says "More data needed"
+  until then (bottleneck and safety alerts still work).
+- Trained models are saved per organization under `var/models/` (git-ignored;
+  change with `MODEL_DIR` in `.env`) and recorded in the `ml_models` table.
+
+Priority parameters (defaults "assumed, to be validated"): weights
+`priority_weight_mobility` 0.4, `priority_weight_criticality` 0.3,
+`priority_weight_hazard` 0.3; mobility factors ambulatory 0, wheelchair 0.5,
+stretcher 0.8, ventilator 1.0; `priority_hazard_distance_m` 50.
+
 ## Roles
 
 | Role (API value)      | Access |

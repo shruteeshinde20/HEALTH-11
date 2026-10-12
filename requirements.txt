@@ -18,3 +18,11 @@ bcrypt==4.3.0
 
 # Time zone database for zoneinfo (required on Windows)
 tzdata==2026.5
+
+# Machine learning (AI features). Versions verified by installing on the
+# project's Windows / Python 3.11 environment.
+scikit-learn==1.9.1
+numpy==2.4.6
+pandas==3.0.6
+joblib==1.6.0
+scipy==1.17.1

@@ -33,6 +33,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5500",
     ]
     log_level: str = "INFO"
+    # Where trained machine-learning models are stored (one folder per organization).
+    model_dir: Path = PROJECT_ROOT / "var" / "models"
 
     # Rate limits (stored in PostgreSQL, so they hold across server workers).
     rate_limit_window_seconds: int = 900
