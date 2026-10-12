@@ -97,9 +97,12 @@ SUMMARY_SCHEMA = {
 class AssistantError(Exception):
     """The language model could not produce a usable answer."""
 
-    def __init__(self, message: str, status_code: int = 502):
+    def __init__(self, message: str, status_code: int = 502, detail: str | None = None):
         super().__init__(message)
         self.status_code = status_code
+        # The AI service's own explanation, for the server log and the setup check
+        # only; API users get the short message above.
+        self.detail = detail
 
 
 class LanguageModel(Protocol):
@@ -135,10 +138,12 @@ def _clarify(question: str, unknown: list[str] | None = None) -> dict:
 def interpret_draft(reply: Any, nodes: list[FloorNode]) -> dict:
     """Check the model's reply against the floor. Returns
     {"clarification": ...} or {"scenario": ...}; never trusts the reply."""
-    if not isinstance(reply, dict) or reply.get("status") not in ("scenario", "clarification"):
+    # Enum values may differ from the schema in capitalization (documented), so compare folded.
+    status = str(reply.get("status") or "").strip().lower() if isinstance(reply, dict) else ""
+    if status not in ("scenario", "clarification"):
         raise AssistantError("The assistant gave an answer in an unexpected format")
 
-    if reply["status"] == "clarification":
+    if status == "clarification":
         question = str(reply.get("clarification_question") or "").strip()[:500]
         unknown = [str(n)[:150] for n in (reply.get("unknown_names") or [])][:20]
         return _clarify(question or "Could you describe where and what the hazard is?", unknown)
@@ -161,7 +166,7 @@ def interpret_draft(reply: Any, nodes: list[FloorNode]) -> dict:
         if len(matches) > 1:
             ambiguous.append(name)
             continue
-        kind = hazard.get("type")
+        kind = str(hazard.get("type") or "").strip().lower()
         severity = hazard.get("severity")
         spread = hazard.get("spread_rate_m_per_min")
         if kind not in HAZARD_TYPES:
@@ -306,6 +311,23 @@ class AnthropicModel:
         self._anthropic = anthropic
         self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout, max_retries=max_retries)
         self._model = model
+        self._api_key = api_key  # only used to make sure it never appears in an error detail
+
+    def _detail(self, exc: Exception) -> str:
+        """The service's error type, message and request id (never the key)."""
+        parts = [type(exc).__name__]
+        status = getattr(exc, "status_code", None)
+        if status is not None:
+            parts.append(f"HTTP {status}")
+        body = getattr(exc, "body", None)
+        error = body.get("error") if isinstance(body, dict) else None
+        if isinstance(error, dict):
+            parts += [str(error[k])[:500] for k in ("type", "message") if error.get(k)]
+        request_id = getattr(exc, "request_id", None)
+        if request_id:
+            parts.append(f"request id {request_id}")
+        text = " | ".join(parts)
+        return text.replace(self._api_key, "[hidden]") if self._api_key else text
 
     def complete_json(self, system: str, user_content: str, schema: dict, max_tokens: int) -> dict:
         anthropic = self._anthropic
@@ -318,15 +340,19 @@ class AnthropicModel:
                 output_config={"format": {"type": "json_schema", "schema": schema}},
             )
         except anthropic.AuthenticationError as exc:
-            raise AssistantError("The AI service rejected the API key; check ANTHROPIC_API_KEY", 503) from exc
+            raise AssistantError("The AI service rejected the API key; check ANTHROPIC_API_KEY", 503,
+                                 self._detail(exc)) from exc
         except anthropic.RateLimitError as exc:
-            raise AssistantError("The AI service is busy; try again in a minute", 503) from exc
+            raise AssistantError("The AI service is busy; try again in a minute", 503,
+                                 self._detail(exc)) from exc
         except anthropic.APITimeoutError as exc:
-            raise AssistantError("The AI service did not answer in time; try again", 503) from exc
+            raise AssistantError("The AI service did not answer in time; try again", 503,
+                                 self._detail(exc)) from exc
         except anthropic.APIConnectionError as exc:
-            raise AssistantError("The AI service could not be reached", 503) from exc
+            raise AssistantError("The AI service could not be reached", 503, self._detail(exc)) from exc
         except anthropic.APIStatusError as exc:
-            raise AssistantError(f"The AI service returned an error ({exc.status_code})", 502) from exc
+            raise AssistantError(f"The AI service returned an error ({exc.status_code})", 502,
+                                 self._detail(exc)) from exc
 
         if getattr(response, "stop_reason", None) in ("refusal", "max_tokens"):
             raise AssistantError("The assistant could not complete an answer; try rephrasing")

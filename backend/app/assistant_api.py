@@ -13,6 +13,7 @@ length is audited), because it may contain patient information.
 """
 
 import json
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -32,6 +33,7 @@ from app.permissions import Editor, Reader
 from app.services import assistant
 
 router = APIRouter(tags=["AI assistant"])
+logger = logging.getLogger(__name__)
 
 Db = Annotated[Session, Depends(get_db)]
 
@@ -89,6 +91,8 @@ def _call(model: assistant.LanguageModel, **kwargs) -> dict:
     try:
         return model.complete_json(**kwargs)
     except assistant.AssistantError as exc:
+        if exc.detail:
+            logger.warning("AI service error: %s", exc.detail)
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 

@@ -220,13 +220,28 @@ def test_malformed_model_replies_are_errors(client, db_session, model, reply):
     assert response.json()["error"]["message"] == "The assistant gave an answer in an unexpected format"
 
 
-def test_service_errors_are_reported_without_details(client, db_session, model):
+def test_service_errors_are_reported_without_details(client, db_session, model, caplog):
     site = Site(client, db_session, "Down Org")
-    model.replies.append(assistant.AssistantError("The AI service could not be reached", 503))
-    response = site.ask("fire in ward a")
+    model.replies.append(assistant.AssistantError("The AI service could not be reached", 503,
+                                                  detail="APIConnectionError | upstream detail"))
+    with caplog.at_level("WARNING", logger="app.assistant_api"):
+        response = site.ask("fire in ward a")
     assert response.status_code == 503
     assert response.json() == {"error": {"code": "SERVICE_UNAVAILABLE",
                                          "message": "The AI service could not be reached"}}
+    # The service's own explanation goes to the server log for administrators only.
+    assert "upstream detail" not in response.text
+    assert "AI service error: APIConnectionError | upstream detail" in caplog.text
+
+
+def test_enum_values_are_accepted_in_any_capitalization(client, db_session, model):
+    # Documented: structured-output enum values may differ from the schema in capitalization.
+    site = Site(client, db_session, "Case Enum Org")
+    reply = scenario_reply(("Ward A", "Fire", 3, 0))
+    reply["status"] = "Scenario"
+    model.replies.append(reply)
+    hazard = site.ask("fire in ward a").json()["scenario"]["hazards"][0]
+    assert (hazard["type"], hazard["name"]) == ("fire", "Fire at Ward A")
 
 
 def test_draft_rules_roles_isolation_and_audit(client, db_session, model):
@@ -334,9 +349,9 @@ def fake_sdk(recorder, response=None, error=None):
         pass
 
     class APIStatusError(APIError):
-        def __init__(self, status_code):
+        def __init__(self, status_code, body=None, request_id=None):
             super().__init__(status_code)
-            self.status_code = status_code
+            self.status_code, self.body, self.request_id = status_code, body, request_id
 
     class AuthenticationError(APIStatusError):
         pass
@@ -395,6 +410,19 @@ def test_adapter_turns_sdk_errors_into_safe_messages(monkeypatch, error, status,
         model.complete_json("S", "U", {}, 10)
     assert raised.value.status_code == status and words in str(raised.value)
     assert "sk-test" not in str(raised.value)
+
+
+def test_adapter_error_detail_explains_the_cause_without_the_key(monkeypatch):
+    body = {"type": "error", "error": {"type": "invalid_request_error",
+                                       "message": "Your credit balance is too low (key sk-test)"}}
+    monkeypatch.setitem(sys.modules, "anthropic",
+                        fake_sdk([], error=lambda m: m.APIStatusError(400, body, "req_123")))
+    model = assistant.AnthropicModel("sk-test", "claude-sonnet-5-5", timeout=5)
+    with pytest.raises(assistant.AssistantError) as raised:
+        model.complete_json("S", "U", {}, 10)
+    assert str(raised.value) == "The AI service returned an error (400)"
+    assert raised.value.detail == ("APIStatusError | HTTP 400 | invalid_request_error | "
+                                   "Your credit balance is too low (key [hidden]) | request id req_123")
 
 
 @pytest.mark.parametrize("response", [

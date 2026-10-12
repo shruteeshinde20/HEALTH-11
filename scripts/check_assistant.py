@@ -47,6 +47,8 @@ def main() -> int:
         result = assistant.interpret_draft(reply, FLOOR)
     except assistant.AssistantError as exc:
         print(f"FAILED: {exc}")
+        if exc.detail:
+            print(f"Reason given by the AI service: {exc.detail}")
         return 1
 
     if "scenario" not in result:
