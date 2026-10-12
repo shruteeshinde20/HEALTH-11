@@ -99,6 +99,35 @@ The test database must already be migrated (step 3).
 PostgreSQL 16, migrations up → down → up, a model/migration drift check
 (`alembic check`) and the full test suite.
 
+## API overview (all under `/api/v1`, header `Authorization: Bearer <token>`)
+
+| Resource | Endpoints |
+|---|---|
+| Auth | `POST /auth/register-organization`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `GET /auth/me` |
+| Hospitals, buildings, floors | `/hospitals`, `/buildings?hospital_id=`, `/floors?building_id=` |
+| Graph | `/nodes?floor_id=&type=`, `/edges?floor_id=&node_id=`, `GET /floors/{id}/graph`, `POST /floors/{id}/route` |
+| People | `/patients?node_id=&mobility=`, `/staff?node_id=` |
+| Scenarios | `/scenarios` (each scenario contains its `hazards` list) |
+| Settings | `/parameters` (name, value, unit, source) |
+| Admin | `/users`, `GET /audit_log?action=&entity_type=&entity_id=&actor_user_id=` |
+| Floor files | `POST /floors/{id}/import` (CSV, JSON, GeoJSON; max 5 MiB), `GET /floors/{id}/export?format=json\|geojson\|csv` |
+
+Every resource supports `GET` list, `GET /{id}`, `POST`, `PATCH /{id}` and
+`DELETE /{id}`. Deleting is a soft delete (the row is hidden and kept for
+history). Lists return `{"items": [...], "total", "limit", "offset"}` and accept
+`?limit=` (1–200, default 50), `?offset=` and `?q=` (search).
+
+Rules worth knowing:
+
+- Everything is scoped to your organization. Another organization's IDs give
+  `404` in the URL and `422` inside a request body.
+- Edges are two-way (A–B is the same as B–A). An edge between two floors must
+  join two stairs, ramps or lifts in the same building.
+- A hospital, building or floor that still has active children cannot be
+  deleted (`409`). Deleting a node also deletes its edges, but not while
+  patients, staff or hazards are placed on it.
+- An organization always keeps at least one active Administrator.
+
 ## Roles
 
 | Role (API value)      | Access |

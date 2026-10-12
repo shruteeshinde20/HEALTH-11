@@ -25,6 +25,30 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBearer(auto_error=False)
 
 
+def normalize_email(value: str) -> str:
+    value = value.strip().lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+        raise ValueError("Enter a valid email address")
+    return value
+
+
+def check_password_strength(value: str) -> str:
+    """Password rules shared by sign-up and user management."""
+    if len(value) < 12:
+        raise ValueError("Password must be at least 12 characters")
+    if len(value.encode("utf-8")) > 72:
+        raise ValueError("Password must be at most 72 UTF-8 bytes")
+    if not any(c.islower() for c in value):
+        raise ValueError("Password must contain a lowercase letter")
+    if not any(c.isupper() for c in value):
+        raise ValueError("Password must contain an uppercase letter")
+    if not any(c.isdigit() for c in value):
+        raise ValueError("Password must contain a digit")
+    if not any(not c.isalnum() for c in value):
+        raise ValueError("Password must contain a special character")
+    return value
+
+
 class RegisterRequest(BaseModel):
     organization_name: str = Field(min_length=2, max_length=200)
     full_name: str = Field(min_length=2, max_length=200)
@@ -42,25 +66,12 @@ class RegisterRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def normalize_email(cls, value: str) -> str:
-        value = value.strip().lower()
-        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
-            raise ValueError("Enter a valid email address")
-        return value
+        return normalize_email(value)
 
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: str) -> str:
-        if len(value.encode("utf-8")) > 72:
-            raise ValueError("Password must be at most 72 UTF-8 bytes")
-        if not any(c.islower() for c in value):
-            raise ValueError("Password must contain a lowercase letter")
-        if not any(c.isupper() for c in value):
-            raise ValueError("Password must contain an uppercase letter")
-        if not any(c.isdigit() for c in value):
-            raise ValueError("Password must contain a digit")
-        if not any(not c.isalnum() for c in value):
-            raise ValueError("Password must contain a special character")
-        return value
+        return check_password_strength(value)
 
 
 class LoginRequest(BaseModel):

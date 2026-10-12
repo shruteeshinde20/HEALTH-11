@@ -165,15 +165,15 @@ def test_staff_user_is_read_only(client, db_session):
     hospital_id, building_id, floor_id = make_floor(db_session, org["org_id"])
     admin = org["headers"]
     node_a = client.post(
-        f"/api/v1/graph/floors/{floor_id}/nodes", headers=admin,
-        json={"name": "A", "type": "corridor"},
+        "/api/v1/nodes", headers=admin,
+        json={"floor_id": floor_id, "name": "A", "type": "corridor"},
     ).json()
     node_b = client.post(
-        f"/api/v1/graph/floors/{floor_id}/nodes", headers=admin,
-        json={"name": "B", "type": "exit"},
+        "/api/v1/nodes", headers=admin,
+        json={"floor_id": floor_id, "name": "B", "type": "exit"},
     ).json()
     edge = client.post(
-        f"/api/v1/graph/floors/{floor_id}/edges", headers=admin,
+        "/api/v1/edges", headers=admin,
         json={"from_node_id": node_a["id"], "to_node_id": node_b["id"],
               "distance": 5, "width": 2, "max_flow": 5},
     ).json()
@@ -182,19 +182,19 @@ def test_staff_user_is_read_only(client, db_session):
     json_headers = {**staff, "Content-Type": "application/json"}
 
     forbidden = [
-        client.post("/api/v1/facilities/hospitals", headers=staff, json={"name": "New"}),
-        client.post(f"/api/v1/facilities/hospitals/{hospital_id}/buildings",
-                    headers=staff, json={"name": "New"}),
-        client.post(f"/api/v1/facilities/buildings/{building_id}/floors",
-                    headers=staff, json={"floor_number": 5, "name": "New"}),
-        client.post(f"/api/v1/graph/floors/{floor_id}/nodes", headers=staff,
-                    json={"name": "C", "type": "room"}),
-        client.patch(f"/api/v1/graph/nodes/{node_a['id']}", headers=staff,
+        client.post("/api/v1/hospitals", headers=staff, json={"timezone": "UTC", "name": "New"}),
+        client.post("/api/v1/buildings",
+                    headers=staff, json={"hospital_id": hospital_id, "name": "New"}),
+        client.post("/api/v1/floors",
+                    headers=staff, json={"building_id": building_id, "floor_number": 5, "name": "New"}),
+        client.post("/api/v1/nodes", headers=staff,
+                    json={"floor_id": floor_id, "name": "C", "type": "room"}),
+        client.patch(f"/api/v1/nodes/{node_a['id']}", headers=staff,
                      json={"is_blocked": True}),
-        client.post(f"/api/v1/graph/floors/{floor_id}/edges", headers=staff,
+        client.post("/api/v1/edges", headers=staff,
                     json={"from_node_id": node_b["id"], "to_node_id": node_a["id"],
                           "distance": 1, "width": 1, "max_flow": 1}),
-        client.patch(f"/api/v1/graph/edges/{edge['id']}", headers=staff,
+        client.patch(f"/api/v1/edges/{edge['id']}", headers=staff,
                      json={"is_blocked": True}),
         client.post(f"/api/v1/floors/{floor_id}/import", headers=json_headers,
                     content=b'{"nodes":[{"name":"Z","type":"room"}],"edges":[]}'),
@@ -204,14 +204,14 @@ def test_staff_user_is_read_only(client, db_session):
         assert_error(response, 403, "FORBIDDEN")
 
     # Nothing changed.
-    graph = client.get(f"/api/v1/graph/floors/{floor_id}", headers=staff)
+    graph = client.get(f"/api/v1/floors/{floor_id}/graph", headers=staff)
     assert graph.status_code == 200
     assert {n["name"] for n in graph.json()["nodes"]} == {"A", "B"}
     assert all(not n["is_blocked"] for n in graph.json()["nodes"])
 
     # Read access still works.
-    assert client.get("/api/v1/facilities/hospitals", headers=staff).status_code == 200
-    route = client.post(f"/api/v1/graph/floors/{floor_id}/route", headers=staff,
+    assert client.get("/api/v1/hospitals", headers=staff).status_code == 200
+    route = client.post(f"/api/v1/floors/{floor_id}/route", headers=staff,
                         json={"start": "A"})
     assert route.status_code == 200, route.text
 
@@ -221,21 +221,21 @@ def test_emergency_commander_can_manage_facilities_and_graph(client, db_session)
     commander = add_member(
         client, db_session, org, UserRole.EMERGENCY_COMMANDER, "cmd@example.com"
     )
-    hospital = client.post("/api/v1/facilities/hospitals", headers=commander,
-                           json={"name": "Commander Hospital"})
+    hospital = client.post("/api/v1/hospitals", headers=commander,
+                           json={"timezone": "UTC", "name": "Commander Hospital"})
     assert hospital.status_code == 201, hospital.text
     building = client.post(
-        f"/api/v1/facilities/hospitals/{hospital.json()['id']}/buildings",
-        headers=commander, json={"name": "Main"},
+        "/api/v1/buildings",
+        headers=commander, json={"hospital_id": hospital.json()['id'], "name": "Main"},
     )
     assert building.status_code == 201, building.text
     floor = client.post(
-        f"/api/v1/facilities/buildings/{building.json()['id']}/floors",
-        headers=commander, json={"floor_number": 0, "name": "Ground"},
+        "/api/v1/floors",
+        headers=commander, json={"building_id": building.json()['id'], "floor_number": 0, "name": "Ground"},
     )
     assert floor.status_code == 201, floor.text
-    node = client.post(f"/api/v1/graph/floors/{floor.json()['id']}/nodes",
-                       headers=commander, json={"name": "Exit 1", "type": "exit"})
+    node = client.post("/api/v1/nodes",
+                       headers=commander, json={"floor_id": floor.json()['id'], "name": "Exit 1", "type": "exit"})
     assert node.status_code == 201, node.text
 
 
@@ -244,18 +244,33 @@ def test_facilities_are_isolated_between_organizations(client, db_session):
     second = register(client, "Facility Beta")
     hospital_id, building_id, _ = make_floor(db_session, first["org_id"])
 
-    assert client.get("/api/v1/facilities/hospitals", headers=second["headers"]).json() == []
+    other = second["headers"]
+    # Phase 2 moved these to the contract paths (/hospitals, /buildings,
+    # /floors). Lists filtered by another organization's ID return nothing,
+    # direct access to its IDs is 404, and using its IDs in a request body is
+    # a 422 validation error. Nothing is read or written in either case.
+    assert client.get("/api/v1/hospitals", headers=other).json()["items"] == []
+    for path in (
+        f"/api/v1/buildings?hospital_id={hospital_id}",
+        f"/api/v1/floors?building_id={building_id}",
+    ):
+        listed = client.get(path, headers=other)
+        assert listed.status_code == 200 and listed.json()["items"] == [], listed.text
     for response in [
-        client.get(f"/api/v1/facilities/hospitals/{hospital_id}/buildings",
-                   headers=second["headers"]),
-        client.post(f"/api/v1/facilities/hospitals/{hospital_id}/buildings",
-                    headers=second["headers"], json={"name": "Intruder"}),
-        client.get(f"/api/v1/facilities/buildings/{building_id}/floors",
-                   headers=second["headers"]),
-        client.post(f"/api/v1/facilities/buildings/{building_id}/floors",
-                    headers=second["headers"], json={"floor_number": 9, "name": "X"}),
+        client.get(f"/api/v1/hospitals/{hospital_id}", headers=other),
+        client.get(f"/api/v1/buildings/{building_id}", headers=other),
+        client.patch(f"/api/v1/hospitals/{hospital_id}", headers=other, json={"name": "Hacked"}),
+        client.delete(f"/api/v1/buildings/{building_id}", headers=other),
     ]:
         assert_error(response, 404, "NOT_FOUND")
+    for response in [
+        client.post("/api/v1/buildings", headers=other,
+                    json={"hospital_id": hospital_id, "name": "Intruder"}),
+        client.post("/api/v1/floors", headers=other,
+                    json={"building_id": building_id, "floor_number": 9, "name": "X"}),
+    ]:
+        assert_error(response, 422, "VALIDATION_ERROR")
+    assert client.get(f"/api/v1/hospitals/{hospital_id}", headers=first["headers"]).json()["name"] == "Hospital A"
 
 
 # --- #6 Unique email per organization ------------------------------------------
@@ -308,21 +323,21 @@ def test_failed_logins_are_audited_without_secrets(client, db_session):
 def test_creates_updates_and_imports_are_audited(client, db_session):
     org = register(client, "Audit Change Org")
     headers = org["headers"]
-    hospital = client.post("/api/v1/facilities/hospitals", headers=headers,
-                           json={"name": "Audited"}).json()
-    building = client.post(f"/api/v1/facilities/hospitals/{hospital['id']}/buildings",
-                           headers=headers, json={"name": "B"}).json()
-    floor = client.post(f"/api/v1/facilities/buildings/{building['id']}/floors",
-                        headers=headers, json={"floor_number": 1, "name": "F"}).json()
-    a = client.post(f"/api/v1/graph/floors/{floor['id']}/nodes", headers=headers,
-                    json={"name": "A", "type": "room"}).json()
-    b = client.post(f"/api/v1/graph/floors/{floor['id']}/nodes", headers=headers,
-                    json={"name": "B", "type": "exit"}).json()
-    client.patch(f"/api/v1/graph/nodes/{a['id']}", headers=headers, json={"capacity": 4})
-    edge = client.post(f"/api/v1/graph/floors/{floor['id']}/edges", headers=headers,
+    hospital = client.post("/api/v1/hospitals", headers=headers,
+                           json={"timezone": "UTC", "name": "Audited"}).json()
+    building = client.post("/api/v1/buildings",
+                           headers=headers, json={"hospital_id": hospital['id'], "name": "B"}).json()
+    floor = client.post("/api/v1/floors",
+                        headers=headers, json={"building_id": building['id'], "floor_number": 1, "name": "F"}).json()
+    a = client.post("/api/v1/nodes", headers=headers,
+                    json={"floor_id": floor['id'], "name": "A", "type": "room"}).json()
+    b = client.post("/api/v1/nodes", headers=headers,
+                    json={"floor_id": floor['id'], "name": "B", "type": "exit"}).json()
+    client.patch(f"/api/v1/nodes/{a['id']}", headers=headers, json={"capacity": 4})
+    edge = client.post("/api/v1/edges", headers=headers,
                        json={"from_node_id": a["id"], "to_node_id": b["id"],
                              "distance": 3, "width": 1, "max_flow": 2}).json()
-    client.patch(f"/api/v1/graph/edges/{edge['id']}", headers=headers, json={"distance": 4})
+    client.patch(f"/api/v1/edges/{edge['id']}", headers=headers, json={"distance": 4})
     imported = client.post(
         f"/api/v1/floors/{floor['id']}/import",
         headers={**headers, "Content-Type": "application/json"},
@@ -352,13 +367,13 @@ def test_rejected_changes_are_not_audited(client, db_session):
     org = register(client, "Audit Reject Org")
     _, _, floor_id = make_floor(db_session, org["org_id"])
     staff = add_member(client, db_session, org, UserRole.STAFF_USER, "s@example.com")
-    client.post(f"/api/v1/graph/floors/{floor_id}/nodes", headers=staff,
-                json={"name": "X", "type": "room"})
-    first = client.post(f"/api/v1/graph/floors/{floor_id}/nodes", headers=org["headers"],
-                        json={"name": "Dup", "type": "room"})
+    client.post("/api/v1/nodes", headers=staff,
+                json={"floor_id": floor_id, "name": "X", "type": "room"})
+    first = client.post("/api/v1/nodes", headers=org["headers"],
+                        json={"floor_id": floor_id, "name": "Dup", "type": "room"})
     assert first.status_code == 201
-    duplicate = client.post(f"/api/v1/graph/floors/{floor_id}/nodes",
-                            headers=org["headers"], json={"name": "Dup", "type": "room"})
+    duplicate = client.post("/api/v1/nodes",
+                            headers=org["headers"], json={"floor_id": floor_id, "name": "Dup", "type": "room"})
     assert_error(duplicate, 409, "CONFLICT")
     assert audit_actions(db_session, org["org_id"]).count("node.created") == 1
 

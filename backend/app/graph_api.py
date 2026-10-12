@@ -1,68 +1,91 @@
+"""Nodes and edges (PROJECT.md API contract), plus floor graph and route.
+
+- /nodes and /edges: GET list (?floor_id=), GET /{id}, POST, PATCH /{id},
+  DELETE /{id} (soft delete).
+- Edges are undirected. Both nodes must be in the same building; an edge
+  between two floors must join vertical connectors (stair, ramp or lift).
+- GET /floors/{id}/graph and POST /floors/{id}/route are read helpers for
+  the Graph Builder and Live Simulation pages.
+"""
+
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
+from app.api_common import (
+    FiniteFloat,
+    Id,
+    Name,
+    NonNegativeFloat,
+    Page,
+    PageParams,
+    PositiveFloat,
+    SearchQuery,
+    changes_from,
+    commit_or_conflict,
+    contains,
+    ensure_none_active,
+    flush_or_conflict,
+    get_active,
+    page_params,
+    paginate,
+    require_reference,
+)
 from app.audit import record_audit
 from app.db_session import get_db
 from app.models.facility import Floor
-from app.models.graph import Edge, Node, NodeType
-from app.models.user import User
+from app.models.graph import VERTICAL_NODE_TYPES, Edge, Node, NodeType
+from app.models.operations import Hazard, Patient, Staff
 from app.permissions import Editor, Reader
+from app.services.routing import (
+    InvalidRouteRequest,
+    NoRouteError,
+    find_route,
+    nearest_safe_exit,
+)
 
-router = APIRouter(prefix="/graph", tags=["Hospital Graph"])
+router = APIRouter(tags=["Hospital Graph"])
 
 Db = Annotated[Session, Depends(get_db)]
+Paging = Annotated[PageParams, Depends(page_params)]
+
+NODE_CONFLICT = "A node with this name already exists on this floor"
+EDGE_CONFLICT = "These two nodes are already connected by an edge"
 
 
-# Request schemas
+# --- Schemas ---------------------------------------------------------------------------
+
+Capacity = Annotated[int, Field(ge=0, le=100_000)]
+MaxFlow = Annotated[int, Field(gt=0, le=100_000)]
+
 
 class NodeCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=150)
+    model_config = ConfigDict(extra="forbid")
+    floor_id: Id
+    name: Name(150)
     type: NodeType
-    x: float = 0.0
-    y: float = 0.0
-    capacity: int = Field(default=0, ge=0)
+    x: FiniteFloat = 0.0
+    y: FiniteFloat = 0.0
+    capacity: Capacity = 0
     is_blocked: bool = False
 
 
 class NodeUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=150)
+    model_config = ConfigDict(extra="forbid")
+    name: Name(150) | None = None
     type: NodeType | None = None
-    x: float | None = None
-    y: float | None = None
-    capacity: int | None = Field(default=None, ge=0)
+    x: FiniteFloat | None = None
+    y: FiniteFloat | None = None
+    capacity: Capacity | None = None
     is_blocked: bool | None = None
 
-
-class EdgeCreate(BaseModel):
-    from_node_id: int = Field(gt=0)
-    to_node_id: int = Field(gt=0)
-    distance: float = Field(ge=0)
-    width: float = Field(gt=0)
-    max_flow: int = Field(gt=0)
-    wheelchair_accessible: bool = True
-    stretcher_accessible: bool = True
-    is_blocked: bool = False
-
-
-class EdgeUpdate(BaseModel):
-    distance: float | None = Field(default=None, ge=0)
-    width: float | None = Field(default=None, gt=0)
-    max_flow: int | None = Field(default=None, gt=0)
-    wheelchair_accessible: bool | None = None
-    stretcher_accessible: bool | None = None
-    is_blocked: bool | None = None
-
-
-# Response schemas
 
 class NodeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     organization_id: int
     floor_id: int
@@ -72,11 +95,34 @@ class NodeOut(BaseModel):
     y: float
     capacity: int
     is_blocked: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class EdgeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    from_node_id: Id
+    to_node_id: Id
+    distance: NonNegativeFloat
+    width: PositiveFloat
+    max_flow: MaxFlow
+    wheelchair_accessible: bool = True
+    stretcher_accessible: bool = True
+    is_blocked: bool = False
+
+
+class EdgeUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    distance: NonNegativeFloat | None = None
+    width: PositiveFloat | None = None
+    max_flow: MaxFlow | None = None
+    wheelchair_accessible: bool | None = None
+    stretcher_accessible: bool | None = None
+    is_blocked: bool | None = None
 
 
 class EdgeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     organization_id: int
     from_node_id: int
@@ -87,6 +133,8 @@ class EdgeOut(BaseModel):
     wheelchair_accessible: bool
     stretcher_accessible: bool
     is_blocked: bool
+    created_at: datetime
+    updated_at: datetime
 
 
 class FloorGraphOut(BaseModel):
@@ -95,291 +143,10 @@ class FloorGraphOut(BaseModel):
     edges: list[EdgeOut]
 
 
-# Organization-scoped database lookups
-
-def _require_floor(
-    db: Session, floor_id: int, organization_id: int
-) -> Floor:
-    floor = db.scalar(
-        select(Floor).where(
-            Floor.id == floor_id,
-            Floor.organization_id == organization_id,
-            Floor.deleted_at.is_(None),
-        )
-    )
-    if floor is None:
-        raise HTTPException(status_code=404, detail="Floor not found")
-    return floor
-
-
-def _require_node(
-    db: Session, node_id: int, organization_id: int
-) -> Node:
-    node = db.scalar(
-        select(Node).where(
-            Node.id == node_id,
-            Node.organization_id == organization_id,
-            Node.deleted_at.is_(None),
-        )
-    )
-    if node is None:
-        raise HTTPException(status_code=404, detail="Node not found")
-    return node
-
-
-def _require_edge(
-    db: Session, edge_id: int, organization_id: int
-) -> Edge:
-    edge = db.scalar(
-        select(Edge).where(
-            Edge.id == edge_id,
-            Edge.organization_id == organization_id,
-            Edge.deleted_at.is_(None),
-        )
-    )
-    if edge is None:
-        raise HTTPException(status_code=404, detail="Edge not found")
-    return edge
-
-
-def _flush_or_conflict(db: Session) -> None:
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="The change conflicts with existing database records",
-        ) from exc
-
-
-def _commit_or_conflict(db: Session) -> None:
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="The change conflicts with existing database records",
-        ) from exc
-
-
-# Read all nodes and edges for one floor
-
-@router.get(
-    "/floors/{floor_id}",
-    response_model=FloorGraphOut,
-)
-def get_floor_graph(
-    floor_id: int,
-    db: Db,
-    user: Reader,
-) -> FloorGraphOut:
-    _require_floor(db, floor_id, user.organization_id)
-
-    nodes = list(
-        db.scalars(
-            select(Node)
-            .where(
-                Node.floor_id == floor_id,
-                Node.organization_id == user.organization_id,
-                Node.deleted_at.is_(None),
-            )
-            .order_by(Node.id)
-        ).all()
-    )
-
-    node_ids = [node.id for node in nodes]
-    edges = []
-
-    if node_ids:
-        edges = list(
-            db.scalars(
-                select(Edge)
-                .where(
-                    Edge.organization_id == user.organization_id,
-                    Edge.from_node_id.in_(node_ids),
-                    Edge.to_node_id.in_(node_ids),
-                    Edge.deleted_at.is_(None),
-                )
-                .order_by(Edge.id)
-            ).all()
-        )
-
-    return FloorGraphOut(
-        floor_id=floor_id,
-        nodes=nodes,
-        edges=edges,
-    )
-
-
-# Create a graph node
-
-@router.post(
-    "/floors/{floor_id}/nodes",
-    response_model=NodeOut,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_node(
-    floor_id: int,
-    payload: NodeCreate,
-    db: Db,
-    user: Editor,
-    request: Request,
-) -> Node:
-    _require_floor(db, floor_id, user.organization_id)
-
-    node = Node(
-        organization_id=user.organization_id,
-        floor_id=floor_id,
-        **payload.model_dump(),
-    )
-    db.add(node)
-    _flush_or_conflict(db)
-    record_audit(
-        db, organization_id=user.organization_id, actor_user_id=user.id,
-        action="node.created", entity_type="node", entity_id=node.id,
-        request=request, details={"floor_id": floor_id},
-    )
-    _commit_or_conflict(db)
-    db.refresh(node)
-    return node
-
-
-# Update a graph node
-
-@router.patch("/nodes/{node_id}", response_model=NodeOut)
-def update_node(
-    node_id: int,
-    payload: NodeUpdate,
-    db: Db,
-    user: Editor,
-    request: Request,
-) -> Node:
-    node = _require_node(db, node_id, user.organization_id)
-    changes = payload.model_dump(exclude_unset=True)
-
-    if not changes:
-        raise HTTPException(status_code=422, detail="No fields supplied")
-
-    if any(value is None for value in changes.values()):
-        raise HTTPException(status_code=422, detail="Fields cannot be null")
-
-    for field, value in changes.items():
-        setattr(node, field, value)
-
-    _flush_or_conflict(db)
-    record_audit(
-        db, organization_id=user.organization_id, actor_user_id=user.id,
-        action="node.updated", entity_type="node", entity_id=node.id,
-        request=request, details={"fields": sorted(changes)},
-    )
-    _commit_or_conflict(db)
-    db.refresh(node)
-    return node
-
-
-# Create an edge between two nodes on the same floor
-
-@router.post(
-    "/floors/{floor_id}/edges",
-    response_model=EdgeOut,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_edge(
-    floor_id: int,
-    payload: EdgeCreate,
-    db: Db,
-    user: Editor,
-    request: Request,
-) -> Edge:
-    _require_floor(db, floor_id, user.organization_id)
-
-    if payload.from_node_id == payload.to_node_id:
-        raise HTTPException(
-            status_code=422,
-            detail="An edge must connect two different nodes",
-        )
-
-    node_ids = {payload.from_node_id, payload.to_node_id}
-    nodes = list(
-        db.scalars(
-            select(Node).where(
-                Node.id.in_(node_ids),
-                Node.floor_id == floor_id,
-                Node.organization_id == user.organization_id,
-                Node.deleted_at.is_(None),
-            )
-        ).all()
-    )
-
-    if {node.id for node in nodes} != node_ids:
-        raise HTTPException(
-            status_code=422,
-            detail="Both edge endpoints must belong to this floor and organization",
-        )
-
-    edge = Edge(
-        organization_id=user.organization_id,
-        **payload.model_dump(),
-    )
-    db.add(edge)
-    _flush_or_conflict(db)
-    record_audit(
-        db, organization_id=user.organization_id, actor_user_id=user.id,
-        action="edge.created", entity_type="edge", entity_id=edge.id,
-        request=request, details={"floor_id": floor_id},
-    )
-    _commit_or_conflict(db)
-    db.refresh(edge)
-    return edge
-
-
-# Update an edge
-
-@router.patch("/edges/{edge_id}", response_model=EdgeOut)
-def update_edge(
-    edge_id: int,
-    payload: EdgeUpdate,
-    db: Db,
-    user: Editor,
-    request: Request,
-) -> Edge:
-    edge = _require_edge(db, edge_id, user.organization_id)
-    changes = payload.model_dump(exclude_unset=True)
-
-    if not changes:
-        raise HTTPException(status_code=422, detail="No fields supplied")
-
-    if any(value is None for value in changes.values()):
-        raise HTTPException(status_code=422, detail="Fields cannot be null")
-
-    for field, value in changes.items():
-        setattr(edge, field, value)
-
-    _flush_or_conflict(db)
-    record_audit(
-        db, organization_id=user.organization_id, actor_user_id=user.id,
-        action="edge.updated", entity_type="edge", entity_id=edge.id,
-        request=request, details={"fields": sorted(changes)},
-    )
-    _commit_or_conflict(db)
-    db.refresh(edge)
-    return edge
-
-from app.services.routing import (
-    InvalidRouteRequest,
-    NoRouteError,
-    find_route,
-    nearest_safe_exit,
-)
-
-
-# Evacuation route request and response schemas
-
 class RouteRequest(BaseModel):
-    start: int | str
-    destination: int | str | None = None
+    model_config = ConfigDict(extra="forbid")
+    start: Annotated[int, Field(gt=0, strict=True)] | Name(150)
+    destination: Annotated[int, Field(gt=0, strict=True)] | Name(150) | None = None
     mobility: str = "ambulatory"
     algorithm: str = "astar"
 
@@ -391,93 +158,253 @@ class RouteOut(BaseModel):
     algorithm: str
 
 
-def _calculate_floor_route(
-    floor_id: int,
-    start: int | str,
-    destination: int | str | None,
-    mobility: str,
-    algorithm: str,
-    db: Session,
-    user: User,
-) -> RouteOut:
-    _require_floor(db, floor_id, user.organization_id)
-
-    nodes = list(
-        db.scalars(
-            select(Node)
-            .where(
-                Node.floor_id == floor_id,
-                Node.organization_id == user.organization_id,
-                Node.deleted_at.is_(None),
-            )
-            .order_by(Node.id)
-        ).all()
+def _audit(db, user, request, action, entity_type, entity_id, details=None):
+    record_audit(
+        db, organization_id=user.organization_id, actor_user_id=user.id,
+        action=action, entity_type=entity_type, entity_id=entity_id,
+        request=request, details=details,
     )
 
+
+def _floor_nodes_and_edges(db: Session, floor_id: int, organization_id: int):
+    nodes = list(db.scalars(
+        select(Node).where(
+            Node.floor_id == floor_id,
+            Node.organization_id == organization_id,
+            Node.deleted_at.is_(None),
+        ).order_by(Node.id)
+    ).all())
     node_ids = [node.id for node in nodes]
     edges = []
-
     if node_ids:
-        edges = list(
-            db.scalars(
-                select(Edge)
-                .where(
-                    Edge.organization_id == user.organization_id,
-                    Edge.from_node_id.in_(node_ids),
-                    Edge.to_node_id.in_(node_ids),
-                    Edge.deleted_at.is_(None),
-                )
-                .order_by(Edge.id)
-            ).all()
-        )
+        edges = list(db.scalars(
+            select(Edge).where(
+                Edge.organization_id == organization_id,
+                Edge.from_node_id.in_(node_ids),
+                Edge.to_node_id.in_(node_ids),
+                Edge.deleted_at.is_(None),
+            ).order_by(Edge.id)
+        ).all())
+    return nodes, edges
 
+
+def _cross_floor_edge_count(db: Session, node: Node) -> int:
+    """Active edges joining `node` to a node on another floor."""
+    other = select(Node.id).where(
+        Node.organization_id == node.organization_id, Node.floor_id != node.floor_id
+    )
+    return db.scalar(
+        select(func.count()).select_from(Edge).where(
+            Edge.organization_id == node.organization_id,
+            Edge.deleted_at.is_(None),
+            or_(
+                (Edge.from_node_id == node.id) & Edge.to_node_id.in_(other),
+                (Edge.to_node_id == node.id) & Edge.from_node_id.in_(other),
+            ),
+        )
+    ) or 0
+
+
+# --- Nodes ----------------------------------------------------------------------------------
+
+@router.get("/nodes", response_model=Page[NodeOut])
+def list_nodes(
+    db: Db, user: Reader, paging: Paging, q: SearchQuery = None,
+    floor_id: Annotated[int | None, Query(gt=0)] = None,
+    type: NodeType | None = None,
+):
+    stmt = select(Node).where(
+        Node.organization_id == user.organization_id, Node.deleted_at.is_(None)
+    )
+    if floor_id is not None:
+        stmt = stmt.where(Node.floor_id == floor_id)
+    if type is not None:
+        stmt = stmt.where(Node.type == type)
+    if (match := contains(Node.name, q)) is not None:
+        stmt = stmt.where(match)
+    return paginate(db, stmt, paging, Node.floor_id, Node.name, Node.id)
+
+
+@router.get("/nodes/{node_id}", response_model=NodeOut)
+def get_node(node_id: int, db: Db, user: Reader):
+    return get_active(db, Node, node_id, user.organization_id, "Node")
+
+
+@router.post("/nodes", response_model=NodeOut, status_code=status.HTTP_201_CREATED)
+def create_node(payload: NodeCreate, db: Db, user: Editor, request: Request):
+    require_reference(db, Floor, payload.floor_id, user.organization_id, "Floor")
+    node = Node(organization_id=user.organization_id, **payload.model_dump())
+    db.add(node)
+    flush_or_conflict(db, NODE_CONFLICT)
+    _audit(db, user, request, "node.created", "node", node.id, {"floor_id": node.floor_id})
+    commit_or_conflict(db, NODE_CONFLICT)
+    db.refresh(node)
+    return node
+
+
+@router.patch("/nodes/{node_id}", response_model=NodeOut)
+def update_node(node_id: int, payload: NodeUpdate, db: Db, user: Editor, request: Request):
+    node = get_active(db, Node, node_id, user.organization_id, "Node")
+    changes = changes_from(payload, not_null=set(NodeUpdate.model_fields))
+    new_type = changes.get("type")
+    if (
+        new_type is not None
+        and new_type not in VERTICAL_NODE_TYPES
+        and _cross_floor_edge_count(db, node)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This node links two floors; it must stay a stair, ramp or lift "
+            "until those edges are deleted",
+        )
+    for field, value in changes.items():
+        setattr(node, field, value)
+    flush_or_conflict(db, NODE_CONFLICT)
+    _audit(db, user, request, "node.updated", "node", node.id, {"fields": sorted(changes)})
+    commit_or_conflict(db, NODE_CONFLICT)
+    db.refresh(node)
+    return node
+
+
+@router.delete("/nodes/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_node(node_id: int, db: Db, user: Editor, request: Request):
+    node = get_active(db, Node, node_id, user.organization_id, "Node")
+    for model, column, label in (
+        (Patient, Patient.node_id, "patients"),
+        (Staff, Staff.node_id, "staff"),
+        (Hazard, Hazard.origin_node_id, "hazards"),
+    ):
+        ensure_none_active(
+            db, model, column == node.id,
+            f"Move or delete the {label} at this node first",
+        )
+    # Edges cannot exist without both nodes, so they are removed with it.
+    removed = db.execute(
+        update(Edge)
+        .where(
+            Edge.organization_id == user.organization_id,
+            Edge.deleted_at.is_(None),
+            or_(Edge.from_node_id == node.id, Edge.to_node_id == node.id),
+        )
+        .values(deleted_at=func.now())
+    ).rowcount
+    node.deleted_at = func.now()
+    _audit(db, user, request, "node.deleted", "node", node.id, {"edges_deleted": removed})
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Edges ---------------------------------------------------------------------------------
+
+@router.get("/edges", response_model=Page[EdgeOut])
+def list_edges(
+    db: Db, user: Reader, paging: Paging,
+    floor_id: Annotated[int | None, Query(gt=0)] = None,
+    node_id: Annotated[int | None, Query(gt=0)] = None,
+):
+    stmt = select(Edge).where(
+        Edge.organization_id == user.organization_id, Edge.deleted_at.is_(None)
+    )
+    if floor_id is not None:
+        on_floor = select(Node.id).where(
+            Node.organization_id == user.organization_id, Node.floor_id == floor_id
+        )
+        # Includes edges that leave the floor (stairs, ramps, lifts).
+        stmt = stmt.where(or_(Edge.from_node_id.in_(on_floor), Edge.to_node_id.in_(on_floor)))
+    if node_id is not None:
+        stmt = stmt.where(or_(Edge.from_node_id == node_id, Edge.to_node_id == node_id))
+    return paginate(db, stmt, paging, Edge.id)
+
+
+@router.get("/edges/{edge_id}", response_model=EdgeOut)
+def get_edge(edge_id: int, db: Db, user: Reader):
+    return get_active(db, Edge, edge_id, user.organization_id, "Edge")
+
+
+@router.post("/edges", response_model=EdgeOut, status_code=status.HTTP_201_CREATED)
+def create_edge(payload: EdgeCreate, db: Db, user: Editor, request: Request):
+    if payload.from_node_id == payload.to_node_id:
+        raise HTTPException(status_code=422, detail="An edge must connect two different nodes")
+    start = require_reference(db, Node, payload.from_node_id, user.organization_id, "Node")
+    end = require_reference(db, Node, payload.to_node_id, user.organization_id, "Node")
+
+    if start.floor_id != end.floor_id:
+        floors = {
+            floor.id: floor for floor in db.scalars(
+                select(Floor).where(Floor.id.in_([start.floor_id, end.floor_id]))
+            )
+        }
+        if floors[start.floor_id].building_id != floors[end.floor_id].building_id:
+            raise HTTPException(
+                status_code=422, detail="Both nodes must be in the same building"
+            )
+        if start.type not in VERTICAL_NODE_TYPES or end.type not in VERTICAL_NODE_TYPES:
+            raise HTTPException(
+                status_code=422,
+                detail="An edge between floors must join two stairs, ramps or lifts",
+            )
+
+    edge = Edge(organization_id=user.organization_id, **payload.model_dump())
+    db.add(edge)
+    flush_or_conflict(db, EDGE_CONFLICT)
+    _audit(db, user, request, "edge.created", "edge", edge.id,
+           {"from_node_id": edge.from_node_id, "to_node_id": edge.to_node_id})
+    commit_or_conflict(db, EDGE_CONFLICT)
+    db.refresh(edge)
+    return edge
+
+
+@router.patch("/edges/{edge_id}", response_model=EdgeOut)
+def update_edge(edge_id: int, payload: EdgeUpdate, db: Db, user: Editor, request: Request):
+    edge = get_active(db, Edge, edge_id, user.organization_id, "Edge")
+    changes = changes_from(payload, not_null=set(EdgeUpdate.model_fields))
+    for field, value in changes.items():
+        setattr(edge, field, value)
+    flush_or_conflict(db, EDGE_CONFLICT)
+    _audit(db, user, request, "edge.updated", "edge", edge.id, {"fields": sorted(changes)})
+    commit_or_conflict(db, EDGE_CONFLICT)
+    db.refresh(edge)
+    return edge
+
+
+@router.delete("/edges/{edge_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_edge(edge_id: int, db: Db, user: Editor, request: Request):
+    edge = get_active(db, Edge, edge_id, user.organization_id, "Edge")
+    edge.deleted_at = func.now()
+    _audit(db, user, request, "edge.deleted", "edge", edge.id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- Floor graph and route ------------------------------------------------------------------
+
+@router.get("/floors/{floor_id}/graph", response_model=FloorGraphOut)
+def get_floor_graph(floor_id: int, db: Db, user: Reader):
+    get_active(db, Floor, floor_id, user.organization_id, "Floor")
+    nodes, edges = _floor_nodes_and_edges(db, floor_id, user.organization_id)
+    return FloorGraphOut(floor_id=floor_id, nodes=nodes, edges=edges)
+
+
+@router.post("/floors/{floor_id}/route", response_model=RouteOut)
+def calculate_evacuation_route(floor_id: int, payload: RouteRequest, db: Db, user: Reader):
+    get_active(db, Floor, floor_id, user.organization_id, "Floor")
+    nodes, edges = _floor_nodes_and_edges(db, floor_id, user.organization_id)
     try:
-        if destination is None:
+        if payload.destination is None:
             result = nearest_safe_exit(
-                nodes,
-                edges,
-                start,
-                mobility=mobility,
-                algorithm=algorithm,
+                nodes, edges, payload.start,
+                mobility=payload.mobility, algorithm=payload.algorithm,
             )
         else:
             result = find_route(
-                nodes,
-                edges,
-                start,
-                destination,
-                mobility=mobility,
-                algorithm=algorithm,
+                nodes, edges, payload.start, payload.destination,
+                mobility=payload.mobility, algorithm=payload.algorithm,
             )
-    except InvalidRouteRequest as exc:
+    except (InvalidRouteRequest, NoRouteError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except NoRouteError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
     return RouteOut(
         node_ids=result.node_ids,
         node_names=result.node_names,
         distance_metres=result.distance_metres,
         algorithm=result.algorithm,
-    )
-
-
-@router.post(
-    "/floors/{floor_id}/route",
-    response_model=RouteOut,
-)
-def calculate_evacuation_route(
-    floor_id: int,
-    payload: RouteRequest,
-    db: Db,
-    user: Reader,
-) -> RouteOut:
-    return _calculate_floor_route(
-        floor_id=floor_id,
-        start=payload.start,
-        destination=payload.destination,
-        mobility=payload.mobility,
-        algorithm=payload.algorithm,
-        db=db,
-        user=user,
     )

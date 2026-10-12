@@ -1,4 +1,4 @@
-﻿
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -71,9 +71,9 @@ def create_floor(db_session, organization_id, suffix):
 
 def create_node(client, floor_id, headers, name):
     response = client.post(
-        f"/api/v1/graph/floors/{floor_id}/nodes",
+        "/api/v1/nodes",
         headers=headers,
-        json={
+        json={"floor_id": floor_id, 
             "name": name,
             "type": "corridor",
             "x": 0,
@@ -97,7 +97,7 @@ def test_graph_create_read_and_update(client, db_session):
     second = create_node(client, floor_id, headers, "Exit A")
 
     edge_response = client.post(
-        f"/api/v1/graph/floors/{floor_id}/edges",
+        "/api/v1/edges",
         headers=headers,
         json={
             "from_node_id": first["id"],
@@ -114,7 +114,7 @@ def test_graph_create_read_and_update(client, db_session):
     edge = edge_response.json()
 
     graph_response = client.get(
-        f"/api/v1/graph/floors/{floor_id}",
+        f"/api/v1/floors/{floor_id}/graph",
         headers=headers,
     )
     assert graph_response.status_code == 200, graph_response.text
@@ -123,7 +123,7 @@ def test_graph_create_read_and_update(client, db_session):
     assert len(graph["edges"]) == 1
 
     node_update = client.patch(
-        f"/api/v1/graph/nodes/{first['id']}",
+        f"/api/v1/nodes/{first['id']}",
         headers=headers,
         json={"capacity": 35, "is_blocked": True},
     )
@@ -132,7 +132,7 @@ def test_graph_create_read_and_update(client, db_session):
     assert node_update.json()["is_blocked"] is True
 
     edge_update = client.patch(
-        f"/api/v1/graph/edges/{edge['id']}",
+        f"/api/v1/edges/{edge['id']}",
         headers=headers,
         json={"distance": 15},
     )
@@ -177,7 +177,7 @@ def test_graph_rejects_edge_between_different_floors(
     )
 
     response = client.post(
-        f"/api/v1/graph/floors/{first_floor}/edges",
+        "/api/v1/edges",
         headers=admin["headers"],
         json={
             "from_node_id": first_node["id"],
@@ -201,14 +201,14 @@ def test_organization_cannot_read_another_organizations_floor(
     )
 
     response = client.get(
-        f"/api/v1/graph/floors/{floor_id}",
+        f"/api/v1/floors/{floor_id}/graph",
         headers=second_admin["headers"],
     )
     assert response.status_code == 404, response.text
 
 
 def test_graph_requires_authentication(client):
-    response = client.get("/api/v1/graph/floors/1")
+    response = client.get("/api/v1/floors/1/graph")
     assert response.status_code == 401, response.text
 
 
@@ -219,9 +219,9 @@ def test_graph_rejects_invalid_node_input(client, db_session):
     )
 
     response = client.post(
-        f"/api/v1/graph/floors/{floor_id}/nodes",
+        "/api/v1/nodes",
         headers=admin["headers"],
-        json={
+        json={"floor_id": floor_id, 
             "name": "",
             "type": "not-a-real-node-type",
             "capacity": -1,
@@ -255,7 +255,7 @@ def test_floor_import_export_round_trip(
     second = create_node(client, source_floor, headers, "Exit A")
 
     edge_response = client.post(
-        f"/api/v1/graph/floors/{source_floor}/edges",
+        "/api/v1/edges",
         headers=headers,
         json={
             "from_node_id": first["id"],
@@ -288,7 +288,7 @@ def test_floor_import_export_round_trip(
     assert import_response.json()["edges_imported"] == 1
 
     graph_response = client.get(
-        f"/api/v1/graph/floors/{destination_floor}",
+        f"/api/v1/floors/{destination_floor}/graph",
         headers=headers,
     )
     assert graph_response.status_code == 200, graph_response.text
@@ -384,7 +384,7 @@ def test_organization_cannot_modify_another_organizations_graph(
     )
 
     edge_response = client.post(
-        f"/api/v1/graph/floors/{floor_id}/edges",
+        "/api/v1/edges",
         headers=first_admin["headers"],
         json={
             "from_node_id": first_node["id"],
@@ -398,21 +398,21 @@ def test_organization_cannot_modify_another_organizations_graph(
     edge = edge_response.json()
 
     node_attack = client.patch(
-        f"/api/v1/graph/nodes/{first_node['id']}",
+        f"/api/v1/nodes/{first_node['id']}",
         headers=second_admin["headers"],
         json={"name": "Unauthorized Change"},
     )
     assert node_attack.status_code == 404, node_attack.text
 
     edge_attack = client.patch(
-        f"/api/v1/graph/edges/{edge['id']}",
+        f"/api/v1/edges/{edge['id']}",
         headers=second_admin["headers"],
         json={"distance": 999},
     )
     assert edge_attack.status_code == 404, edge_attack.text
 
     owner_graph = client.get(
-        f"/api/v1/graph/floors/{floor_id}",
+        f"/api/v1/floors/{floor_id}/graph",
         headers=first_admin["headers"],
     )
     assert owner_graph.status_code == 200, owner_graph.text

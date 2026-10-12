@@ -1,277 +1,308 @@
+"""Hospitals, buildings and floors (PROJECT.md API contract).
 
+GET list, GET /{id}, POST, PATCH /{id}, DELETE /{id} (soft delete).
+Reads: any signed-in user. Writes: Administrator or Emergency Commander.
+"""
+
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.api_common import (
+    FiniteFloat,
+    Id,
+    Name,
+    OptionalText,
+    Page,
+    PageParams,
+    SearchQuery,
+    TimeZoneName,
+    changes_from,
+    commit_or_conflict,
+    contains,
+    ensure_none_active,
+    flush_or_conflict,
+    get_active,
+    page_params,
+    paginate,
+    require_reference,
+    soft_delete,
+)
 from app.audit import record_audit
 from app.db_session import get_db
 from app.models.facility import Building, Floor, Hospital
+from app.models.graph import Node
 from app.permissions import Editor, Reader
 
-
-router = APIRouter(prefix="/facilities", tags=["Facilities"])
+router = APIRouter(tags=["Facilities"])
 
 Db = Annotated[Session, Depends(get_db)]
+Paging = Annotated[PageParams, Depends(page_params)]
+
+HOSPITAL_CONFLICT = "A hospital with this name already exists"
+BUILDING_CONFLICT = "A building with this name already exists in this hospital"
+FLOOR_CONFLICT = "This floor number already exists in this building"
 
 
-# Request schemas
+# --- Schemas ------------------------------------------------------------------------
 
 class HospitalCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    address: str | None = Field(default=None, max_length=500)
-    timezone: str = Field(default="Asia/Kolkata", max_length=100)
+    model_config = ConfigDict(extra="forbid")
+    name: Name(200)
+    address: OptionalText(500) = None
+    timezone: TimeZoneName
 
 
-class BuildingCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
-    description: str | None = Field(default=None, max_length=500)
+class HospitalUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: Name(200) | None = None
+    address: OptionalText(500) = None
+    timezone: TimeZoneName | None = None
 
-
-class FloorCreate(BaseModel):
-    floor_number: int
-    name: str = Field(min_length=1, max_length=100)
-    elevation_metres: float | None = None
-
-
-# Response schemas
 
 class HospitalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     organization_id: int
     name: str
     address: str | None
     timezone: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class BuildingCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    hospital_id: Id
+    name: Name(200)
+    description: OptionalText(500) = None
+
+
+class BuildingUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: Name(200) | None = None
+    description: OptionalText(500) = None
 
 
 class BuildingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     organization_id: int
     hospital_id: int
     name: str
     description: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+FloorNumber = Annotated[int, Field(ge=-20, le=300)]
+
+
+class FloorCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    building_id: Id
+    floor_number: FloorNumber
+    name: Name(100)
+    elevation_metres: FiniteFloat | None = None
+
+
+class FloorUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    floor_number: FloorNumber | None = None
+    name: Name(100) | None = None
+    elevation_metres: FiniteFloat | None = None
 
 
 class FloorOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
     id: int
     organization_id: int
     building_id: int
     floor_number: int
     name: str
     elevation_metres: float | None
+    created_at: datetime
+    updated_at: datetime
 
 
-# Authorization and database helpers
-
-def _flush(db: Session) -> None:
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A conflicting facility record already exists",
-        ) from exc
-
-
-def _commit(db: Session) -> None:
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A conflicting facility record already exists",
-        ) from exc
-
-
-def _hospital(db: Session, hospital_id: int, org_id: int) -> Hospital:
-    item = db.scalar(
-        select(Hospital).where(
-            Hospital.id == hospital_id,
-            Hospital.organization_id == org_id,
-            Hospital.deleted_at.is_(None),
-        )
-    )
-    if item is None:
-        raise HTTPException(status_code=404, detail="Hospital not found")
-    return item
-
-
-def _building(db: Session, building_id: int, org_id: int) -> Building:
-    item = db.scalar(
-        select(Building).where(
-            Building.id == building_id,
-            Building.organization_id == org_id,
-            Building.deleted_at.is_(None),
-        )
-    )
-    if item is None:
-        raise HTTPException(status_code=404, detail="Building not found")
-    return item
-
-
-# Hospitals
-
-@router.post(
-    "/hospitals",
-    response_model=HospitalOut,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_hospital(
-    payload: HospitalCreate,
-    db: Db,
-    user: Editor,
-    request: Request,
-) -> Hospital:
-    hospital = Hospital(
-        organization_id=user.organization_id,
-        **payload.model_dump(),
-    )
-    db.add(hospital)
-    _flush(db)
+def _audit(db, user, request, action, entity_type, entity_id, details=None):
     record_audit(
         db, organization_id=user.organization_id, actor_user_id=user.id,
-        action="hospital.created", entity_type="hospital",
-        entity_id=hospital.id, request=request,
+        action=action, entity_type=entity_type, entity_id=entity_id,
+        request=request, details=details,
     )
-    _commit(db)
+
+
+# --- Hospitals --------------------------------------------------------------------------
+
+@router.get("/hospitals", response_model=Page[HospitalOut])
+def list_hospitals(db: Db, user: Reader, paging: Paging, q: SearchQuery = None):
+    stmt = select(Hospital).where(
+        Hospital.organization_id == user.organization_id, Hospital.deleted_at.is_(None)
+    )
+    if (match := contains(Hospital.name, q)) is not None:
+        stmt = stmt.where(match)
+    return paginate(db, stmt, paging, Hospital.name, Hospital.id)
+
+
+@router.get("/hospitals/{hospital_id}", response_model=HospitalOut)
+def get_hospital(hospital_id: int, db: Db, user: Reader):
+    return get_active(db, Hospital, hospital_id, user.organization_id, "Hospital")
+
+
+@router.post("/hospitals", response_model=HospitalOut, status_code=status.HTTP_201_CREATED)
+def create_hospital(payload: HospitalCreate, db: Db, user: Editor, request: Request):
+    hospital = Hospital(organization_id=user.organization_id, **payload.model_dump())
+    db.add(hospital)
+    flush_or_conflict(db, HOSPITAL_CONFLICT)
+    _audit(db, user, request, "hospital.created", "hospital", hospital.id)
+    commit_or_conflict(db, HOSPITAL_CONFLICT)
     db.refresh(hospital)
     return hospital
 
 
-@router.get("/hospitals", response_model=list[HospitalOut])
-def list_hospitals(db: Db, user: Reader) -> list[Hospital]:
-    return list(
-        db.scalars(
-            select(Hospital)
-            .where(
-                Hospital.organization_id == user.organization_id,
-                Hospital.deleted_at.is_(None),
-            )
-            .order_by(Hospital.id)
-        ).all()
+@router.patch("/hospitals/{hospital_id}", response_model=HospitalOut)
+def update_hospital(hospital_id: int, payload: HospitalUpdate, db: Db, user: Editor, request: Request):
+    hospital = get_active(db, Hospital, hospital_id, user.organization_id, "Hospital")
+    changes = changes_from(payload, not_null={"name", "timezone"})
+    for field, value in changes.items():
+        setattr(hospital, field, value)
+    flush_or_conflict(db, HOSPITAL_CONFLICT)
+    _audit(db, user, request, "hospital.updated", "hospital", hospital.id, {"fields": sorted(changes)})
+    commit_or_conflict(db, HOSPITAL_CONFLICT)
+    db.refresh(hospital)
+    return hospital
+
+
+@router.delete("/hospitals/{hospital_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_hospital(hospital_id: int, db: Db, user: Editor, request: Request):
+    hospital = get_active(db, Hospital, hospital_id, user.organization_id, "Hospital")
+    ensure_none_active(
+        db, Building, Building.hospital_id == hospital.id,
+        "Delete this hospital's buildings first",
     )
+    soft_delete(hospital)
+    _audit(db, user, request, "hospital.deleted", "hospital", hospital.id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# Buildings
+# --- Buildings ---------------------------------------------------------------------------
 
-@router.post(
-    "/hospitals/{hospital_id}/buildings",
-    response_model=BuildingOut,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_building(
-    hospital_id: int,
-    payload: BuildingCreate,
-    db: Db,
-    user: Editor,
-    request: Request,
-) -> Building:
-    _hospital(db, hospital_id, user.organization_id)
-
-    building = Building(
-        organization_id=user.organization_id,
-        hospital_id=hospital_id,
-        **payload.model_dump(),
+@router.get("/buildings", response_model=Page[BuildingOut])
+def list_buildings(
+    db: Db, user: Reader, paging: Paging, q: SearchQuery = None,
+    hospital_id: Annotated[int | None, Query(gt=0)] = None,
+):
+    stmt = select(Building).where(
+        Building.organization_id == user.organization_id, Building.deleted_at.is_(None)
     )
+    if hospital_id is not None:
+        stmt = stmt.where(Building.hospital_id == hospital_id)
+    if (match := contains(Building.name, q)) is not None:
+        stmt = stmt.where(match)
+    return paginate(db, stmt, paging, Building.name, Building.id)
+
+
+@router.get("/buildings/{building_id}", response_model=BuildingOut)
+def get_building(building_id: int, db: Db, user: Reader):
+    return get_active(db, Building, building_id, user.organization_id, "Building")
+
+
+@router.post("/buildings", response_model=BuildingOut, status_code=status.HTTP_201_CREATED)
+def create_building(payload: BuildingCreate, db: Db, user: Editor, request: Request):
+    require_reference(db, Hospital, payload.hospital_id, user.organization_id, "Hospital")
+    building = Building(organization_id=user.organization_id, **payload.model_dump())
     db.add(building)
-    _flush(db)
-    record_audit(
-        db, organization_id=user.organization_id, actor_user_id=user.id,
-        action="building.created", entity_type="building",
-        entity_id=building.id, request=request,
-        details={"hospital_id": hospital_id},
-    )
-    _commit(db)
+    flush_or_conflict(db, BUILDING_CONFLICT)
+    _audit(db, user, request, "building.created", "building", building.id,
+           {"hospital_id": building.hospital_id})
+    commit_or_conflict(db, BUILDING_CONFLICT)
     db.refresh(building)
     return building
 
 
-@router.get(
-    "/hospitals/{hospital_id}/buildings",
-    response_model=list[BuildingOut],
-)
-def list_buildings(
-    hospital_id: int,
-    db: Db,
-    user: Reader,
-) -> list[Building]:
-    _hospital(db, hospital_id, user.organization_id)
-    return list(
-        db.scalars(
-            select(Building)
-            .where(
-                Building.hospital_id == hospital_id,
-                Building.organization_id == user.organization_id,
-                Building.deleted_at.is_(None),
-            )
-            .order_by(Building.id)
-        ).all()
+@router.patch("/buildings/{building_id}", response_model=BuildingOut)
+def update_building(building_id: int, payload: BuildingUpdate, db: Db, user: Editor, request: Request):
+    building = get_active(db, Building, building_id, user.organization_id, "Building")
+    changes = changes_from(payload, not_null={"name"})
+    for field, value in changes.items():
+        setattr(building, field, value)
+    flush_or_conflict(db, BUILDING_CONFLICT)
+    _audit(db, user, request, "building.updated", "building", building.id, {"fields": sorted(changes)})
+    commit_or_conflict(db, BUILDING_CONFLICT)
+    db.refresh(building)
+    return building
+
+
+@router.delete("/buildings/{building_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_building(building_id: int, db: Db, user: Editor, request: Request):
+    building = get_active(db, Building, building_id, user.organization_id, "Building")
+    ensure_none_active(
+        db, Floor, Floor.building_id == building.id, "Delete this building's floors first",
     )
+    soft_delete(building)
+    _audit(db, user, request, "building.deleted", "building", building.id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# Floors
+# --- Floors ---------------------------------------------------------------------------------
 
-@router.post(
-    "/buildings/{building_id}/floors",
-    response_model=FloorOut,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_floor(
-    building_id: int,
-    payload: FloorCreate,
-    db: Db,
-    user: Editor,
-    request: Request,
-) -> Floor:
-    _building(db, building_id, user.organization_id)
-
-    floor = Floor(
-        organization_id=user.organization_id,
-        building_id=building_id,
-        **payload.model_dump(),
+@router.get("/floors", response_model=Page[FloorOut])
+def list_floors(
+    db: Db, user: Reader, paging: Paging, q: SearchQuery = None,
+    building_id: Annotated[int | None, Query(gt=0)] = None,
+):
+    stmt = select(Floor).where(
+        Floor.organization_id == user.organization_id, Floor.deleted_at.is_(None)
     )
+    if building_id is not None:
+        stmt = stmt.where(Floor.building_id == building_id)
+    if (match := contains(Floor.name, q)) is not None:
+        stmt = stmt.where(match)
+    return paginate(db, stmt, paging, Floor.building_id, Floor.floor_number, Floor.id)
+
+
+@router.get("/floors/{floor_id}", response_model=FloorOut)
+def get_floor(floor_id: int, db: Db, user: Reader):
+    return get_active(db, Floor, floor_id, user.organization_id, "Floor")
+
+
+@router.post("/floors", response_model=FloorOut, status_code=status.HTTP_201_CREATED)
+def create_floor(payload: FloorCreate, db: Db, user: Editor, request: Request):
+    require_reference(db, Building, payload.building_id, user.organization_id, "Building")
+    floor = Floor(organization_id=user.organization_id, **payload.model_dump())
     db.add(floor)
-    _flush(db)
-    record_audit(
-        db, organization_id=user.organization_id, actor_user_id=user.id,
-        action="floor.created", entity_type="floor",
-        entity_id=floor.id, request=request,
-        details={"building_id": building_id},
-    )
-    _commit(db)
+    flush_or_conflict(db, FLOOR_CONFLICT)
+    _audit(db, user, request, "floor.created", "floor", floor.id, {"building_id": floor.building_id})
+    commit_or_conflict(db, FLOOR_CONFLICT)
     db.refresh(floor)
     return floor
 
 
-@router.get(
-    "/buildings/{building_id}/floors",
-    response_model=list[FloorOut],
-)
-def list_floors(
-    building_id: int,
-    db: Db,
-    user: Reader,
-) -> list[Floor]:
-    _building(db, building_id, user.organization_id)
-    return list(
-        db.scalars(
-            select(Floor)
-            .where(
-                Floor.building_id == building_id,
-                Floor.organization_id == user.organization_id,
-                Floor.deleted_at.is_(None),
-            )
-            .order_by(Floor.floor_number)
-        ).all()
-    )
+@router.patch("/floors/{floor_id}", response_model=FloorOut)
+def update_floor(floor_id: int, payload: FloorUpdate, db: Db, user: Editor, request: Request):
+    floor = get_active(db, Floor, floor_id, user.organization_id, "Floor")
+    changes = changes_from(payload, not_null={"floor_number", "name"})
+    for field, value in changes.items():
+        setattr(floor, field, value)
+    flush_or_conflict(db, FLOOR_CONFLICT)
+    _audit(db, user, request, "floor.updated", "floor", floor.id, {"fields": sorted(changes)})
+    commit_or_conflict(db, FLOOR_CONFLICT)
+    db.refresh(floor)
+    return floor
+
+
+@router.delete("/floors/{floor_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_floor(floor_id: int, db: Db, user: Editor, request: Request):
+    floor = get_active(db, Floor, floor_id, user.organization_id, "Floor")
+    ensure_none_active(db, Node, Node.floor_id == floor.id, "Delete this floor's nodes first")
+    soft_delete(floor)
+    _audit(db, user, request, "floor.deleted", "floor", floor.id)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
