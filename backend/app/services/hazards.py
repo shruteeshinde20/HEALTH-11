@@ -15,6 +15,9 @@ Model (algorithmic, not machine learning):
   `hazard_risk_horizon_minutes` before arrival. Several hazards: maximum.
 - During any fire or smoke hazard, ordinary lifts are not used; only lifts
   marked as evacuation lifts remain usable.
+- A hazard may start later (optional `start_minutes`, used for hazards added
+  during a simulation): before it starts it has no effect; afterwards its
+  arrival times are counted from its start.
 
 Limits: no ventilation, temperature, door or material data; spread speed is
 whatever the scenario says. Results support planning and training only.
@@ -87,6 +90,9 @@ def hazard_context(
         if hazard.origin_node_id not in graph:
             context.ignored_hazard_ids.append(hazard.id)
             continue
+        start = float(getattr(hazard, "start_minutes", 0.0) or 0.0)
+        if start > minutes_elapsed:
+            continue
         kind = _value(hazard.type)
         if kind in LIFT_DISABLING_TYPES:
             context.lifts_disabled = True
@@ -97,9 +103,9 @@ def hazard_context(
         distances = nx.single_source_dijkstra_path_length(graph, hazard.origin_node_id, weight="distance")
         for node_id, metres in distances.items():
             if hazard.spread_rate > 0:
-                reached_at = metres / hazard.spread_rate
+                reached_at = start + metres / hazard.spread_rate
             else:
-                reached_at = 0.0 if node_id == hazard.origin_node_id else math.inf
+                reached_at = start if node_id == hazard.origin_node_id else math.inf
             if not math.isfinite(reached_at):
                 continue
             arrival[node_id] = min(arrival.get(node_id, math.inf), reached_at)

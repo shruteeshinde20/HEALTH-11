@@ -182,6 +182,40 @@ These are planning models (not machine learning): they do not model walking
 speeds, crowds, doors or ventilation, and they do not replace official
 emergency procedures.
 
+## Simulation
+
+| Endpoint | What it does | Who |
+|---|---|---|
+| `POST /simulate {scenario_id, algorithm, building_id?}` | Runs and saves a simulation, returns `{run_id}`. `building_id` can be left out when the scenario's hazards are in one building. | Administrator, Emergency Commander |
+| `GET /simulation_runs`, `GET /simulation_runs/{id}` | Saved runs: summary, timeline, each person's route and outcome, congestion, bottlenecks, recommendations, parameters used | everyone |
+| `POST /simulations/{run_id}/hazards {name, type, origin_node_id, spread_rate, severity, at_seconds}` | Adds a hazard that appears mid-run; everyone re-routes and the run is recalculated | Administrator, Emergency Commander |
+| `POST /compare {scenario_id, building_id?}` | Same scenario with BFS, DFS, Dijkstra and A*: `[{algorithm, evacuation_time_s, distance_m, risk}]` (not saved) | Administrator, Emergency Commander |
+| `GET /dashboard` | `{hospitals, scenarios, last_evacuation_time_s, bottlenecks}` | everyone |
+| `WS /api/v1/ws/simulations/{run_id}?token=<access token>&speed=10` | Streams the run tick by tick; send `{"action": "pause"}` / `{"action": "resume"}` | everyone in the organization |
+
+How it works: every patient and staff member placed in the building walks
+their route at the speed for their mobility type. Corridors let at most
+`max_flow` people per minute in; the rest queue in arrival order. Hazards
+spread on the simulation clock and people re-route (or turn back) when their
+route becomes unsafe. Outcomes are `evacuated`, `needs_assistance` or
+`reached_by_hazard`; only people who reach an exit count as evacuated, and the
+dashboard shows an evacuation time only when everyone got out. The same inputs
+always give the same result; each run keeps a snapshot so it can be replayed.
+
+| Parameter | Default (assumed, to be validated) |
+|---|---|
+| `speed_ambulatory_m_per_s` | 1.2 |
+| `speed_wheelchair_m_per_s` | 0.8 |
+| `speed_stretcher_m_per_s` | 0.5 |
+| `speed_ventilator_m_per_s` | 0.4 |
+| `simulation_tick_seconds` | 1 |
+| `simulation_max_minutes` | 60 |
+| `simulation_frame_seconds` | 5 (timeline sampling) |
+
+Set real, sourced values in `/parameters`; every run lists the values and
+sources it used. Not modelled: alarm/pre-movement delay, crowd density inside
+corridors, slower movement on stairs, staff helping patients.
+
 ## Roles
 
 | Role (API value)      | Access |

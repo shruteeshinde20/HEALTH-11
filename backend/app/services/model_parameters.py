@@ -52,6 +52,34 @@ SPECS = {
             "exit_imbalance_share", 0.7, "fraction", 0.5, 1.0,
             "Recommend spreading people out when one exit gets more than this share.",
         ),
+        ParameterSpec(
+            "speed_ambulatory_m_per_s", 1.2, "m/s", 0.05, 5.0,
+            "Walking speed of ambulatory patients and staff.",
+        ),
+        ParameterSpec(
+            "speed_wheelchair_m_per_s", 0.8, "m/s", 0.05, 5.0,
+            "Speed of wheelchair users (with or without assistance).",
+        ),
+        ParameterSpec(
+            "speed_stretcher_m_per_s", 0.5, "m/s", 0.05, 5.0,
+            "Speed of a patient moved on a stretcher or bed.",
+        ),
+        ParameterSpec(
+            "speed_ventilator_m_per_s", 0.4, "m/s", 0.05, 5.0,
+            "Speed of a ventilated patient moved with bed and equipment.",
+        ),
+        ParameterSpec(
+            "simulation_tick_seconds", 1.0, "s", 0.1, 10.0,
+            "Length of one simulation step.",
+        ),
+        ParameterSpec(
+            "simulation_max_minutes", 60.0, "min", 1.0, 600.0,
+            "The simulation stops after this much simulated time.",
+        ),
+        ParameterSpec(
+            "simulation_frame_seconds", 5.0, "s", 1.0, 600.0,
+            "How often the saved timeline records a snapshot.",
+        ),
     )
 }
 

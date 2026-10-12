@@ -9,6 +9,8 @@ from app.graph_api import router as graph_router
 from app.parameter_api import router as parameter_router
 from app.people_api import router as people_router
 from app.scenario_api import router as scenario_router
+from app.simulation_api import router as simulation_router
+from app.simulation_ws import router as simulation_ws_router
 from app.users_api import router as users_router
 
 router = APIRouter()
@@ -19,6 +21,8 @@ router.include_router(floor_io_router)
 router.include_router(people_router)
 router.include_router(scenario_router)
 router.include_router(analysis_router)
+router.include_router(simulation_router)
+router.include_router(simulation_ws_router)
 router.include_router(parameter_router)
 router.include_router(users_router)
 router.include_router(audit_router)

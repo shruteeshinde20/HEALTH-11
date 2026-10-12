@@ -217,8 +217,14 @@ def get_current_user(
 ) -> User:
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="Authentication required")
+    return user_from_access_token(db, credentials.credentials)
 
-    claims = _decode_token(credentials.credentials, "access")
+
+def user_from_access_token(db: Session, token: str | None) -> User:
+    """Validate an access token and return its active user (HTTP and WebSocket)."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    claims = _decode_token(token, "access")
     try:
         user_id = int(claims["sub"])
         organization_id = int(claims["org_id"])
