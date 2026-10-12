@@ -9,11 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.audit import record_audit
 from app.db_session import get_db
 from app.models.facility import Floor
 from app.models.graph import Edge, Node, NodeType
-from app.models.user import User
+from app.permissions import Editor
 
 router = APIRouter(tags=["Floor Import and Export"])
 
@@ -210,8 +210,8 @@ def _parse_content(content: bytes, content_type: str) -> FloorImport:
 async def import_floor(
     floor_id: int,
     request: Request,
+    user: Editor,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
 ):
     chunks: list[bytes] = []
     total_bytes = 0
@@ -331,6 +331,16 @@ async def import_floor(
                 **item.model_dump(exclude={"from_node", "to_node"}),
             ))
 
+        record_audit(
+            db, organization_id=user.organization_id, actor_user_id=user.id,
+            action="floor.imported", entity_type="floor", entity_id=floor_id,
+            request=request,
+            details={
+                "format": content_type,
+                "nodes_imported": len(data.nodes),
+                "edges_imported": len(data.edges),
+            },
+        )
         db.commit()
     except HTTPException:
         db.rollback()
@@ -355,9 +365,9 @@ async def import_floor(
 @router.get("/floors/{floor_id}/export")
 def export_floor(
     floor_id: int,
+    user: Editor,
     format: str = "json",
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
 ):
     _floor_or_404(db, floor_id, user.organization_id)
 

@@ -8,6 +8,8 @@ from sqlalchemy import (
     Index,
     String,
     UniqueConstraint,
+    func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +24,17 @@ class UserRole(str, enum.Enum):
 
 class User(TenantMixin, TimestampMixin, Base):
     __tablename__ = "users"
+    __table_args__ = (
+        # One active account per email inside an organization. Soft-deleted
+        # users do not block the email from being reused.
+        Index(
+            "uq_users_org_email_active",
+            "organization_id",
+            func.lower(text("email")),
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)

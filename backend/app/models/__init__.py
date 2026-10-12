@@ -9,6 +9,7 @@ from app.models.operations import (
     Staff,
 )
 from app.models.organization import Organization
+from app.models.security import RateLimitEvent
 from app.models.simulation import (
     AuditLog,
     EvacuationPlan,
@@ -32,6 +33,7 @@ __all__ = [
     "NodeType",
     "Organization",
     "Parameter",
+    "RateLimitEvent",
     "RefreshToken",
     "Patient",
     "PatientMobility",

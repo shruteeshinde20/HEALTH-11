@@ -351,3 +351,11 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_organizations_slug'), table_name='organizations')
     op.drop_table('organizations')
     # ### end Alembic commands ###
+
+    # PostgreSQL enum types are created implicitly by create_table() but are
+    # not dropped by drop_table(). Without this, downgrade followed by upgrade
+    # fails with 'type "user_role" already exists'.
+    op.execute("DROP TYPE IF EXISTS patient_mobility")
+    op.execute("DROP TYPE IF EXISTS hazard_type")
+    op.execute("DROP TYPE IF EXISTS node_type")
+    op.execute("DROP TYPE IF EXISTS user_role")

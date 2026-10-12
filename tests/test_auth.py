@@ -38,7 +38,10 @@ def register(client, payload):
 def test_register_creates_admin_and_authenticates(client, registration_payload):
     result = register(client, registration_payload)
 
-    assert result["user"]["role"] == "administrator"
+    # PROJECT.md API contract: roles are exactly "Administrator",
+    # "Emergency Commander", "Staff User". (This assertion previously expected
+    # the internal database value "administrator", which broke the contract.)
+    assert result["user"]["role"] == "Administrator"
     assert result["user"]["email"] == "admin@example.com"
     assert result["organization"]["id"] == result["user"]["organization_id"]
     assert result["access_token"]

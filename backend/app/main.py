@@ -1,16 +1,17 @@
-﻿import logging
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api import router as api_router
 from app.config import get_settings
 from app.db_session import engine
+from app.errors import error_body, error_code_for_status
 from app.health import router as health_router
 from app.logging_config import configure_logging
 
@@ -37,11 +38,30 @@ app.include_router(health_router)
 app.include_router(api_router, prefix=settings.api_v1_prefix)
 
 
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request: Request, exc: StarletteHTTPException):
+    message = exc.detail if isinstance(exc.detail, str) else "Request failed"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_body(error_code_for_status(exc.status_code), message),
+        headers=getattr(exc, "headers", None),
+    )
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
+    # Report which fields failed and why, but never echo the submitted values
+    # (they may contain passwords or other sensitive input).
+    details = [
+        {
+            "field": ".".join(str(part) for part in error.get("loc", ())),
+            "message": error.get("msg", "Invalid value"),
+        }
+        for error in exc.errors()
+    ]
     return JSONResponse(
         status_code=422,
-        content={"error": {"code": "VALIDATION_ERROR", "message": "Request validation failed"}},
+        content=error_body("VALIDATION_ERROR", "Request validation failed", details),
     )
 
 
@@ -50,7 +70,7 @@ async def database_error_handler(request: Request, exc: SQLAlchemyError):
     logger.exception("Database operation failed")
     return JSONResponse(
         status_code=503,
-        content={"error": {"code": "DATABASE_UNAVAILABLE", "message": "Database operation failed"}},
+        content=error_body("DATABASE_UNAVAILABLE", "Database operation failed"),
     )
 
 
@@ -59,5 +79,5 @@ async def unexpected_error_handler(request: Request, exc: Exception):
     logger.exception("Unhandled application error")
     return JSONResponse(
         status_code=500,
-        content={"error": {"code": "INTERNAL_ERROR", "message": "An unexpected error occurred"}},
+        content=error_body("INTERNAL_ERROR", "An unexpected error occurred"),
     )

@@ -1,4 +1,5 @@
-﻿from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+import logging
 import re
 import secrets
 import uuid
@@ -7,15 +8,19 @@ import bcrypt
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import rate_limit
+from app.audit import client_ip, record_audit
 from app.config import get_settings
 from app.db_session import get_db
-from app.models import AuditLog, Organization, RefreshToken, User, UserRole
+from app.models import Organization, RefreshToken, User, UserRole
+from app.roles import role_label
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBearer(auto_error=False)
 
@@ -83,6 +88,11 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
 
+    @field_serializer("role")
+    def serialize_role(self, role: UserRole) -> str:
+        # API contract: "Administrator", "Emergency Commander", "Staff User".
+        return role_label(role)
+
 
 def _password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -93,6 +103,18 @@ def _password_matches(password: str, stored_hash: str) -> bool:
         return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
     except (ValueError, TypeError):
         return False
+
+
+_dummy_hash: str | None = None
+
+
+def _burn_password_check(password: str) -> None:
+    """Spend the same time as a real check when the account does not exist,
+    so response timing does not reveal which emails are registered."""
+    global _dummy_hash
+    if _dummy_hash is None:
+        _dummy_hash = _password_hash(secrets.token_urlsafe(16))
+    _password_matches(password, _dummy_hash)
 
 
 def _issue_token(user: User, token_type: str, lifetime: timedelta, jti: str) -> str:
@@ -120,17 +142,17 @@ def _audit(
     entity_type: str,
     entity_id: int | None,
     request: Request,
+    details: dict | None = None,
 ) -> None:
-    db.add(
-        AuditLog(
-            organization_id=organization_id,
-            actor_user_id=actor_user_id,
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            details=None,
-            ip_address=request.client.host if request.client else None,
-        )
+    record_audit(
+        db,
+        organization_id=organization_id,
+        actor_user_id=actor_user_id,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        request=request,
+        details=details,
     )
 
 
@@ -207,6 +229,14 @@ def get_current_user(
 
 @router.post("/register-organization", status_code=201)
 def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+    settings = get_settings()
+    rate_limit.hit(
+        db,
+        rate_limit.bucket_key("register:ip", client_ip(request) or "unknown"),
+        settings.register_max_attempts_per_ip,
+        settings.register_window_seconds,
+    )
+
     slug_base = re.sub(r"[^a-z0-9]+", "-", payload.organization_name.lower()).strip("-")
     slug = slug_base[:80].strip("-")
     if not slug:
@@ -251,6 +281,26 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
 
 @router.post("/login")
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    settings = get_settings()
+    window = settings.rate_limit_window_seconds
+
+    # 1) Per client IP: every attempt counts (stops password spraying).
+    rate_limit.hit(
+        db,
+        rate_limit.bucket_key("login:ip", client_ip(request) or "unknown"),
+        settings.login_max_attempts_per_ip,
+        window,
+    )
+
+    # 2) Per account: only failures count, so a locked-out attacker cannot
+    #    keep guessing one user's password from many IPs.
+    account_key = rate_limit.bucket_key(
+        "login:account", f"{payload.organization_slug}|{payload.email}"
+    )
+    rate_limit.ensure_not_limited(
+        db, account_key, settings.login_max_failures_per_account, window
+    )
+
     organization = db.scalar(
         select(Organization).where(
             Organization.slug == payload.organization_slug,
@@ -267,10 +317,27 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
             )
         )
 
-    if user is None or not _password_matches(payload.password, user.password_hash):
+    if user is None:
+        _burn_password_check(payload.password)
+        password_ok = False
+    else:
+        password_ok = _password_matches(payload.password, user.password_hash)
+
+    if not password_ok or not user.is_active:
+        reason = "inactive_account" if password_ok else "invalid_credentials"
+        rate_limit.record_event(db, account_key)
+        if organization is not None:
+            _audit(
+                db, organization.id, user.id if user else None,
+                "auth.login_failed", "user", user.id if user else None,
+                request, details={"reason": reason},
+            )
+        else:
+            logger.warning("Login failed for an unknown organization")
+        db.commit()
+        if password_ok:
+            raise HTTPException(status_code=403, detail="User account is inactive")
         raise HTTPException(status_code=401, detail="Invalid organization, email, or password")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="User account is inactive")
 
     try:
         tokens = _new_token_pair(db, user)

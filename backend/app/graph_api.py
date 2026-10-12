@@ -1,21 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.audit import record_audit
 from app.db_session import get_db
 from app.models.facility import Floor
 from app.models.graph import Edge, Node, NodeType
 from app.models.user import User
+from app.permissions import Editor, Reader
 
 router = APIRouter(prefix="/graph", tags=["Hospital Graph"])
 
 Db = Annotated[Session, Depends(get_db)]
-CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
 # Request schemas
@@ -142,6 +142,17 @@ def _require_edge(
     return edge
 
 
+def _flush_or_conflict(db: Session) -> None:
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="The change conflicts with existing database records",
+        ) from exc
+
+
 def _commit_or_conflict(db: Session) -> None:
     try:
         db.commit()
@@ -162,7 +173,7 @@ def _commit_or_conflict(db: Session) -> None:
 def get_floor_graph(
     floor_id: int,
     db: Db,
-    user: CurrentUser,
+    user: Reader,
 ) -> FloorGraphOut:
     _require_floor(db, floor_id, user.organization_id)
 
@@ -213,7 +224,8 @@ def create_node(
     floor_id: int,
     payload: NodeCreate,
     db: Db,
-    user: CurrentUser,
+    user: Editor,
+    request: Request,
 ) -> Node:
     _require_floor(db, floor_id, user.organization_id)
 
@@ -223,6 +235,12 @@ def create_node(
         **payload.model_dump(),
     )
     db.add(node)
+    _flush_or_conflict(db)
+    record_audit(
+        db, organization_id=user.organization_id, actor_user_id=user.id,
+        action="node.created", entity_type="node", entity_id=node.id,
+        request=request, details={"floor_id": floor_id},
+    )
     _commit_or_conflict(db)
     db.refresh(node)
     return node
@@ -235,7 +253,8 @@ def update_node(
     node_id: int,
     payload: NodeUpdate,
     db: Db,
-    user: CurrentUser,
+    user: Editor,
+    request: Request,
 ) -> Node:
     node = _require_node(db, node_id, user.organization_id)
     changes = payload.model_dump(exclude_unset=True)
@@ -249,6 +268,12 @@ def update_node(
     for field, value in changes.items():
         setattr(node, field, value)
 
+    _flush_or_conflict(db)
+    record_audit(
+        db, organization_id=user.organization_id, actor_user_id=user.id,
+        action="node.updated", entity_type="node", entity_id=node.id,
+        request=request, details={"fields": sorted(changes)},
+    )
     _commit_or_conflict(db)
     db.refresh(node)
     return node
@@ -265,7 +290,8 @@ def create_edge(
     floor_id: int,
     payload: EdgeCreate,
     db: Db,
-    user: CurrentUser,
+    user: Editor,
+    request: Request,
 ) -> Edge:
     _require_floor(db, floor_id, user.organization_id)
 
@@ -298,6 +324,12 @@ def create_edge(
         **payload.model_dump(),
     )
     db.add(edge)
+    _flush_or_conflict(db)
+    record_audit(
+        db, organization_id=user.organization_id, actor_user_id=user.id,
+        action="edge.created", entity_type="edge", entity_id=edge.id,
+        request=request, details={"floor_id": floor_id},
+    )
     _commit_or_conflict(db)
     db.refresh(edge)
     return edge
@@ -310,7 +342,8 @@ def update_edge(
     edge_id: int,
     payload: EdgeUpdate,
     db: Db,
-    user: CurrentUser,
+    user: Editor,
+    request: Request,
 ) -> Edge:
     edge = _require_edge(db, edge_id, user.organization_id)
     changes = payload.model_dump(exclude_unset=True)
@@ -324,6 +357,12 @@ def update_edge(
     for field, value in changes.items():
         setattr(edge, field, value)
 
+    _flush_or_conflict(db)
+    record_audit(
+        db, organization_id=user.organization_id, actor_user_id=user.id,
+        action="edge.updated", entity_type="edge", entity_id=edge.id,
+        request=request, details={"fields": sorted(changes)},
+    )
     _commit_or_conflict(db)
     db.refresh(edge)
     return edge
@@ -431,7 +470,7 @@ def calculate_evacuation_route(
     floor_id: int,
     payload: RouteRequest,
     db: Db,
-    user: CurrentUser,
+    user: Reader,
 ) -> RouteOut:
     return _calculate_floor_route(
         floor_id=floor_id,

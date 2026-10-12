@@ -5,7 +5,7 @@ from pathlib import Path
 
 from alembic import context
 from dotenv import load_dotenv
-from sqlalchemy import URL, create_engine, pool
+from sqlalchemy import URL, create_engine, make_url, pool
 
 config = context.config
 
@@ -18,28 +18,47 @@ BACKEND_DIR = PROJECT_ROOT / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.database import Base
+from app.database import Base  # noqa: E402
 import app.models  # noqa: F401, E402
 
 target_metadata = Base.metadata
 
+# Values already present in the environment win over .env (load_dotenv does
+# not override), so a shell can point Alembic at the test database with
+# DATABASE_URL without editing any file.
 load_dotenv(PROJECT_ROOT / ".env")
 
-required_vars = ("POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD")
-missing_vars = [name for name in required_vars if not os.environ.get(name)]
-if missing_vars:
-    raise RuntimeError(
-        "Missing required environment variables in .env: "
-        + ", ".join(missing_vars)
+
+def _database_url() -> URL:
+    explicit_url = os.environ.get("DATABASE_URL")
+    if explicit_url:
+        return make_url(explicit_url)
+
+    required_vars = ("POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD")
+    missing_vars = [name for name in required_vars if not os.environ.get(name)]
+    if missing_vars:
+        raise RuntimeError(
+            "Set DATABASE_URL, or set these variables in .env: "
+            + ", ".join(missing_vars)
+        )
+
+    return URL.create(
+        drivername="postgresql+psycopg",
+        username=os.environ["POSTGRES_USER"],
+        password=os.environ["POSTGRES_PASSWORD"],
+        host=os.environ.get("POSTGRES_HOST", "127.0.0.1"),
+        port=int(os.environ.get("POSTGRES_PORT", "5433")),
+        database=os.environ["POSTGRES_DB"],
     )
 
-database_url = URL.create(
-    drivername="postgresql+psycopg",
-    username=os.environ["POSTGRES_USER"],
-    password=os.environ["POSTGRES_PASSWORD"],
-    host="127.0.0.1",
-    port=5433,
-    database=os.environ["POSTGRES_DB"],
+
+database_url = _database_url()
+
+# Always show which database is about to change (never the password).
+print(
+    f"Alembic target database: {database_url.host}:{database_url.port}"
+    f"/{database_url.database}",
+    file=sys.stderr,
 )
 
 
