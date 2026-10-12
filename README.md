@@ -149,6 +149,39 @@ lists `node_names`, `floor_ids` and `distance_metres`.
 | `dijkstra` | the shortest distance |
 | `astar` | the shortest distance, using node positions to search faster |
 
+## Hazards, bottlenecks and recommendations
+
+- A scenario's hazards spread along the building graph at `spread_rate`
+  **metres per minute**. Fire, hazmat and structural hazards block the nodes
+  they reach; smoke blocks at or above `smoke_blocking_severity` and otherwise
+  adds risk. Nodes about to be reached carry rising risk, which routes avoid.
+- During **fire or smoke**, ordinary lifts are not used. Mark protected lifts
+  with `is_evacuation_lift: true` (only allowed on nodes of type `lift`).
+- Route around hazards: add `"scenario_id"` and `"minutes_elapsed"` to
+  `POST /floors/{id}/route`. The response shows the real walking distance and,
+  separately, the added `risk_cost_metres`.
+- `POST /scenarios/{id}/analysis` with `{"building_id": ..., "minutes_elapsed": 0,
+  "algorithm": "astar"}` routes every placed patient and staff member and
+  returns hazard state per node, routes, people with no safe route, edge load
+  and queue minutes (edge `max_flow` = **people per minute**), betweenness,
+  single points of failure, exit load and plain-language recommendations.
+  Nothing is saved.
+
+Model numbers are read from `/parameters` when present; otherwise the default
+is used and labelled "default (assumed, to be validated)" in every response:
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `hazard_risk_horizon_minutes` | 5 | risk rises during this time before a hazard arrives |
+| `hazard_risk_cost_metres` | 50 | extra route cost at full risk |
+| `smoke_blocking_severity` | 4 | smoke at this severity or higher blocks a node (6 = never) |
+| `bottleneck_queue_minutes` | 2 | an edge is a bottleneck when its queue takes this long |
+| `exit_imbalance_share` | 0.7 | suggest spreading people when one exit gets more than this share |
+
+These are planning models (not machine learning): they do not model walking
+speeds, crowds, doors or ventilation, and they do not replace official
+emergency procedures.
+
 ## Roles
 
 | Role (API value)      | Access |
