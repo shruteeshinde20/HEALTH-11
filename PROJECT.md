@@ -4,11 +4,27 @@
 
 #
 
+## Scope rule
+
+The full scope in this file is the target. Never reduce it to an "MVP" on your own, never drop a feature or page, and never skip a build step. If something cannot be finished in a step, say so clearly and tell me what is left. Build in the order given in "Build order".
+
+#
+
+## Environment rules
+
+- The developer is a complete beginner working on Windows 11 with PowerShell, VS Code and Docker Desktop. Give commands for PowerShell and explain errors in simple words.
+
+- Run commands on the developer's computer. If you cannot run something in your environment (Docker, PostgreSQL, a browser), say so and give the exact commands for me to run, then wait for the output. Never pretend something ran.
+
+- Never print secrets (.env values, passwords, keys).
+
+#
+
 # \## Stack
 
 # \- Frontend: Next.js (App Router), TypeScript, Tailwind, React Flow (graph canvas), Recharts (charts). Rebuild the 13 pages from docs/design/preview.html exactly in look and wording.
 
-# \- Backend: FastAPI (Python 3.11), NetworkX, SQLAlchemy 2, Alembic, Pydantic, JWT auth (bcrypt password hashing, access plus refresh tokens), WebSocket
+# \- Backend: FastAPI (Python 3.11), NetworkX, SQLAlchemy 2, Alembic, Pydantic and pydantic-settings, JWT auth (bcrypt password hashing, access plus refresh tokens), WebSocket
 
 # \- Database: PostgreSQL
 
@@ -34,7 +50,7 @@
 
 # 4\. Every page has loading, empty and error states. Responsive. Light theme only. Accessible (contrast, keyboard navigation, labels).
 
-# 5\. Never invent libraries or functions. If unsure, ask.
+# 5\. Never invent libraries, functions, versions or data. If unsure, ask. Check that a package version exists before pinning it.
 
 # 6\. Pin all dependency versions.
 
@@ -42,9 +58,53 @@
 
 # 8\. Secrets (API keys, database passwords, JWT secret) live only in .env, never in code or git. Provide .env.example without real values.
 
-# 9\. Multi-tenant isolation is mandatory (see the Multi-hospital section). Every query and every WebSocket is filtered by the logged-in user's organization\_id.
+# 9\. Multi-tenant isolation is mandatory (see the Multi-hospital section). Every query and every WebSocket is filtered by the logged-in user's organization\_id, taken from the token, never from the request body.
 
 # 10\. Treat all user input, uploaded files and AI text as untrusted. Validate everything.
+
+# 11\. Tests use a separate database (health11\_test) and must never touch the development database. Never weaken or delete a test to make it pass; fix the code. Change a test only if the test itself is wrong, and explain why.
+
+#
+
+# \## Build order (do not skip or reorder)
+
+# 1\. Project skeleton, Docker, CI (done)
+
+# 2\. Database schema and migration (done)
+
+# 3\. Database tests on a separate test database
+
+# 4\. Backend foundation: pinned dependencies, settings from .env, database session, GET /health, error format, logging, CORS
+
+# 5\. Authentication, roles, tenant isolation (with tests proving organization A cannot see organization B)
+
+# 6\. Data CRUD APIs, floor import and export
+
+# 7\. Routing engine (BFS, DFS, Dijkstra, A\*) with the Test case
+
+# 8\. Hazards, bottleneck detection, recommendations
+
+# 9\. Simulation, WebSocket streaming, algorithm comparison, dynamic re-routing
+
+# 10\. AI features 1, 2 and 5 (predictor, priority scoring, alerts)
+
+# 11\. AI Assistant (LLM)
+
+# 12\. Reports (PDF and CSV)
+
+# 13\. Frontend foundation (layout, login, sign-up, API client)
+
+# 14\. Frontend pages in groups (onboarding, dashboard, facility manager; graph and scenario builders; live simulation and comparison; patients, AI assistant, reports; admin, settings, landing)
+
+# 15\. Security and quality review
+
+# 16\. End-to-end tests (Playwright)
+
+# 17\. Deployment preparation
+
+# 18\. Documentation and demo
+
+# Do one step at a time. After each step: run the tests, show the real output, and commit.
 
 #
 
@@ -66,11 +126,11 @@
 
 # \- Rate limiting on login, sign-up and the AI endpoint. Password rules. JWT expiry plus refresh token. Logout invalidates the refresh token.
 
-# \- CORS origins from .env. Structured logging. Health endpoint GET /health. Error messages must not leak internals.
+# \- CORS origins from .env. Structured logging. Health endpoint GET /health (also checks the database). Error messages must not leak internals; one consistent JSON error format.
 
 # \- Database indexes, pagination and search on every list endpoint, soft delete (deleted\_at) for hospital data, created\_at and updated\_at everywhere.
 
-# \- Full audit log of every create, update and delete, and of logins.
+# \- Full audit log of every create, update and delete, and of logins and failed logins.
 
 # \- Automated tests (pytest, Playwright), GitHub Actions CI, production Dockerfiles, backup and restore script.
 
@@ -87,6 +147,8 @@
 # \## Design
 
 # Light theme only. Background #F8FAFC, white cards with 1px #E2E8F0 border and soft shadow, 12px radius, primary #7DB8E8, success #BFE8D0, warning #FCE9B2, danger #F9C5C5, ink #1E3A5F, text #334155 and #64748B, Inter font, minimal and spacious, left sidebar plus content area. Match docs/design/preview.html.
+
+# The Live Simulation page follows the Evac1 digital-twin layout embedded in the preview (left controls, central floor map, right results panel), but in the real app it uses the light theme colors above and shows only data from the API.
 
 #
 
@@ -106,7 +168,7 @@
 
 # organizations, users(organization\_id, role), hospitals, buildings, floors, nodes(type: room/ward/icu/corridor/stair/ramp/lift/exit/assembly, x, y, floor, capacity, is\_blocked), edges(from\_node, to\_node, distance in metres, width, max\_flow, wheelchair\_accessible, stretcher\_accessible, is\_blocked), patients(mobility: ambulatory/wheelchair/stretcher/ventilator, criticality, node\_id, is\_synthetic), staff, hazards(type: fire/smoke/hazmat/structural, origin\_node, spread\_rate, severity), scenarios, simulation\_runs(algorithm, params, results JSON), evacuation\_plans, parameters(name, value, unit, source), audit\_log, ml\_models(organization\_id, type, metrics, trained\_at, file\_path).
 
-# All hospital-data tables carry organization\_id, created\_at, updated\_at, deleted\_at.
+# All hospital-data tables carry organization\_id, created\_at, updated\_at, deleted\_at. Add a refresh\_tokens table (or equivalent) when authentication is built, with an Alembic migration.
 
 #
 
@@ -166,6 +228,32 @@
 
 #
 
+# \## API contract (the frontend expects this; keep it unless I approve a change)
+
+# All paths start with /api/v1. Header: Authorization: Bearer <token>. List endpoints return a JSON array or {items:\[...]} and support pagination. The organization always comes from the token.
+
+# \- Auth: POST /auth/register-organization, POST /auth/login, POST /auth/refresh, POST /auth/logout. Login returns {access\_token, refresh\_token, user:{id,email,full\_name,role}}. Roles are exactly "Administrator", "Emergency Commander", "Staff User".
+
+# \- CRUD (GET list, GET /{id}, POST, PATCH /{id}, DELETE /{id} as soft delete): /hospitals, /buildings, /floors, /nodes (filter ?floor\_id=), /edges (filter ?floor\_id=), /patients, /staff, /users, /parameters, /scenarios (with hazards).
+
+# \- GET /audit\_log. GET /dashboard returns {hospitals, scenarios, last\_evacuation\_time\_s, bottlenecks}.
+
+# \- POST /simulate {scenario\_id, algorithm: bfs|dfs|dijkstra|astar} returns {run\_id}. GET /simulation\_runs and GET /simulation\_runs/{id} (timeline, routes, bottlenecks, recommendations).
+
+# \- WebSocket /ws/simulations/{run\_id}?token=... sends ticks {t, total, evacuated, positions:\[{id,x,y,mobility}], blocked\_nodes, congested\_edges, exit\_load, done}; accepts {action:"pause"|"resume"}. Authenticated and organization-checked.
+
+# \- POST /simulations/{run\_id}/hazards (dynamic re-routing). POST /compare {scenario\_id} returns \[{algorithm, evacuation\_time\_s, distance\_m, risk}].
+
+# \- POST /predict {scenario\_id} returns {predicted\_time\_s, method, mae, r2, note}; predicted\_time\_s is null with a note if there is not enough data. GET /alerts returns {message?, alerts:\[{run\_id, reason}]}.
+
+# \- POST /assistant {text, floor\_id} returns {clarification} or {scenario}. GET /reports/{run\_id}?format=pdf|csv returns a file.
+
+# \- POST /floors/{id}/import (CSV, GeoJSON or JSON, size-limited) and GET /floors/{id}/export.
+
+# \- GET /health (no login) checks the API and the database.
+
+#
+
 # \## Test case (must pass)
 
 # Nodes: ICU (type icu), WardA (ward), C1 and C2 (corridor), S1 and S2 (stair), R1 and R2 (ramp), E1 and E2 (exit).
@@ -184,4 +272,7 @@
 
 # \## Working rules for the AI assistant
 
-# Read this file at the start of every task. Do one small task at a time. Do not change unrelated files. Do not invent libraries, functions or data. After coding, run it and show real output. Never claim something works unless you ran it. If unsure, ask instead of guessing. Commit to git after each working step.
+# Read this file at the start of every task. Do one small task at a time, in the Build order. Do not change unrelated files. Do not invent libraries, functions, versions or data. After coding, run it and show real output. Never claim something works unless you ran it. If unsure, ask instead of guessing. Commit to git after each working step, only the files of that step, and show git status --short and git log -3 --oneline. End every task with a table: Step, What you ran, Real result (passed, failed or not run).
+
+
+
