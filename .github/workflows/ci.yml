@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests (Python 3.11, PostgreSQL 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16.6
+        env:
+          POSTGRES_DB: health11_test
+          POSTGRES_USER: health11
+          # Throwaway password for the disposable CI database only.
+          POSTGRES_PASSWORD: ci_only_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U health11 -d health11_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+psycopg://health11:ci_only_password@127.0.0.1:5433/health11_test
+      TEST_DATABASE_URL: postgresql+psycopg://health11:ci_only_password@127.0.0.1:5433/health11_test
+      JWT_SECRET_KEY: ci-only-jwt-secret-not-used-anywhere-else-0001
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pinned dependencies
+        run: pip install -r requirements.txt
+
+      - name: Apply migrations
+        run: alembic upgrade head
+
+      - name: Migrations are reversible (downgrade to base, upgrade again)
+        run: |
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Models match migrations
+        run: alembic check
+
+      - name: Run tests
+        run: python -m pytest -v

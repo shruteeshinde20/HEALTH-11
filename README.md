@@ -1,11 +1,76 @@
-# HEALTH-11 database tests
+# HEALTH-11: Emergency Evac Graph
 
-Copy the `tests` folder into the root of your local `HEALTH-11` checkout.
+Hospital evacuation planning (FastAPI + PostgreSQL). The full specification is in
+[PROJECT.md](PROJECT.md).
 
-Run from PowerShell at `C:\Users\shrut\HEALTH-11`:
+> HEALTH-11 supports planning and training. It does not replace a hospital's
+> official emergency procedures or fire-safety professionals.
+
+All commands are for **PowerShell**, run from the project folder
+(for example `C:\Users\<you>\HEALTH-11`).
+
+## 1. First-time setup
 
 ```powershell
-$envValues = @{}
+# Python 3.11 virtual environment and pinned packages
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# Create your private settings file, then open it and replace every placeholder
+Copy-Item .env.example .env
+notepad .env
+```
+
+Generate a JWT secret for `JWT_SECRET_KEY` in `.env`:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+## 2. Start PostgreSQL (Docker Desktop must be running)
+
+```powershell
+docker compose up -d
+docker compose ps        # wait until health11-postgres shows "healthy"
+```
+
+Create the separate test database once:
+
+```powershell
+docker exec health11-postgres createdb -U health11 health11_test
+```
+
+## 3. Apply database migrations
+
+Alembic prints the target database before it changes anything — check it.
+
+```powershell
+# Development database (uses POSTGRES_* from .env)
+.\.venv\Scripts\alembic.exe upgrade head
+
+# Test database: point DATABASE_URL at it for this command only
+$env:DATABASE_URL = "postgresql+psycopg://health11:<your-password>@127.0.0.1:5433/health11_test"
+.\.venv\Scripts\alembic.exe upgrade head
+Remove-Item Env:DATABASE_URL
+```
+
+## 4. Run the API
+
+```powershell
+.\.venv\Scripts\uvicorn.exe app.main:app --app-dir backend --reload
+```
+
+- Health check: http://127.0.0.1:8000/health
+- API docs: http://127.0.0.1:8000/docs (all endpoints are under `/api/v1`)
+
+Behind a reverse proxy in production, start uvicorn with `--proxy-headers`
+so rate limits and the audit log see the real client IP.
+
+## 5. Run the tests
+
+Tests only ever use `health11_test`; they refuse to run against any other database.
+
+```powershell
 Get-Content .env.test | ForEach-Object {
     if ($_ -match '^\s*TEST_DATABASE_URL\s*=\s*(.*)$') {
         $env:TEST_DATABASE_URL = $matches[1].Trim().Trim('"').Trim("'")
@@ -16,7 +81,41 @@ if (-not $env:TEST_DATABASE_URL -or -not $env:TEST_DATABASE_URL.EndsWith('/healt
 }
 $env:DATABASE_URL = $env:TEST_DATABASE_URL
 .\.venv\Scripts\python.exe -m pytest -v
+Remove-Item Env:DATABASE_URL
 ```
 
-This suite does not create/drop tables or run migrations. It expects the migration to have been applied to `health11_test`.
-It wraps each test in a transaction and rolls the test data back. No commit is performed.
+`.env.test` contains a single line (keep it private, it is git-ignored):
+
+```
+TEST_DATABASE_URL=postgresql+psycopg://health11:<your-password>@127.0.0.1:5433/health11_test
+```
+
+Each test runs inside a transaction that is rolled back, so no test data is kept.
+The test database must already be migrated (step 3).
+
+## 6. Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request: Python 3.11,
+PostgreSQL 16, migrations up → down → up, a model/migration drift check
+(`alembic check`) and the full test suite.
+
+## Roles
+
+| Role (API value)      | Access |
+|-----------------------|--------|
+| `Administrator`       | Everything, including users and the audit log of their own organization |
+| `Emergency Commander` | Everything except Admin |
+| `Staff User`          | Read-only |
+
+## Error format
+
+Every error response has the same shape:
+
+```json
+{"error": {"code": "NOT_FOUND", "message": "Floor not found"}}
+```
+
+Validation errors (HTTP 422) also include
+`"details": [{"field": "body.email", "message": "..."}]`. Submitted values are
+never echoed back. Rate-limited requests return HTTP 429 with a `Retry-After`
+header.
