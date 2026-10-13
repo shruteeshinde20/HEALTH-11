@@ -53,6 +53,38 @@ export async function apiRequest<T>(path: string, options: {
   return (await response.json()) as T;
 }
 
+type PageOf<T> = { items: T[]; total: number };
+
+/** Every item of a paginated list (pages of 200, the API maximum). */
+export async function apiAll<T>(path: string, query: Query = {}, signal?: AbortSignal): Promise<T[]> {
+  const items: T[] = [];
+  const limit = 200;
+  for (let offset = 0; ; offset += limit) {
+    const page = await apiRequest<PageOf<T>>(path, { query: { ...query, limit, offset }, signal });
+    items.push(...page.items);
+    if (page.items.length < limit || items.length >= page.total) return items;
+  }
+}
+
+/** Upload a file as the raw request body with the given Content-Type. */
+export async function apiUpload<T>(path: string, file: Blob, contentType: string): Promise<T> {
+  const response = await fetch(`/api/backend${path}`, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": contentType },
+    body: file,
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  if (response.status === 401) {
+    goToLogin();
+    throw new ApiError(401, "UNAUTHORIZED", "Your session has ended. Please log in again.");
+  }
+  if (!response.ok) {
+    throw toApiError(response.status, await response.json().catch(() => null), response.headers.get("retry-after"));
+  }
+  return (await response.json()) as T;
+}
+
 /** For the session routes (/api/session/*), which answer login errors normally. */
 export async function sessionRequest<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/session/${path}`, {

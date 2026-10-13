@@ -6,7 +6,6 @@ import { useState, type FormEvent } from "react";
 import { sessionRequest } from "@/lib/client/api.ts";
 import { fieldErrors } from "@/lib/client/field-errors.ts";
 import { rememberOrganization } from "@/lib/client/remember.ts";
-import { HOME_PATH } from "@/lib/shared/navigation.ts";
 import { describeError } from "@/lib/shared/errors.ts";
 
 // Limits from the backend (RegisterRequest in backend/app/auth.py).
@@ -59,7 +58,7 @@ export function RegisterForm() {
         <p>Your Organization ID is needed to log in. Keep it and share it with your team:</p>
         <p className="big break-all" aria-label="Organization ID">{created.organization.slug}</p>
         <p>
-          <a className="btn" href={HOME_PATH}>Continue to the dashboard</a>
+          <Link className="btn" href="/onboarding">Set up your hospital</Link>
         </p>
       </section>
     );

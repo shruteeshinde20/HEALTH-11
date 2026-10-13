@@ -51,3 +51,39 @@ export type Alerts = {
   method: string;
   runs_considered: number;
 };
+
+export type Hospital = {
+  id: number;
+  name: string;
+  address: string | null;
+  timezone: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Building = {
+  id: number;
+  hospital_id: number;
+  name: string;
+  description: string | null;
+};
+
+export type Floor = {
+  id: number;
+  building_id: number;
+  floor_number: number;
+  name: string;
+  elevation_metres: number | null;
+};
+
+export type GraphNode = { id: number; name: string; type: string; floor_id: number };
+
+export type FloorGraph = { nodes: GraphNode[]; edges: { id: number }[] };
+
+export type FloorImportResult = { floor_id: number; nodes_imported: number; edges_imported: number };
+
+export type HazardType = "fire" | "smoke" | "hazmat" | "structural";
+
+export type RunDetail = RunSummary & {
+  recommendations: { severity: string; text: string }[];
+};

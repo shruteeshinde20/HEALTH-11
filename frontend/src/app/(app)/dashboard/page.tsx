@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { Card, DataTable, EmptyState, ErrorState, LoadingState, PageHeader, Stat, Tag } from "@/components/ui.tsx";
+import { useUser } from "@/lib/client/session.tsx";
 import { useApi } from "@/lib/client/use-api.ts";
 import type { Alerts, Dashboard, Page, RunSummary, ScenarioName } from "@/lib/shared/api-types.ts";
 import { algorithmLabel, formatSeconds } from "@/lib/shared/format.ts";
@@ -27,6 +28,7 @@ const ALERT_TAGS = {
 } as const;
 
 export default function DashboardPage() {
+  const user = useUser();
   const dashboard = useApi<Dashboard>("/dashboard");
   const runs = useApi<Page<RunSummary>>("/simulation_runs", { limit: RECENT_RUNS });
   const scenarios = useApi<Page<ScenarioName>>("/scenarios", { limit: 200 });
@@ -38,6 +40,22 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader title="Dashboard" subtitle="Where your hospital stands right now." />
+
+      {dashboard.data && !dashboard.data.last_run && (
+        <Card className="mb-[14px]">
+          <h2>Get started</h2>
+          {user.role === "Staff User"
+            ? <p className="m-0">Your organization has not finished setting up yet. An Administrator or Emergency Commander can do this.</p>
+            : (
+              <p className="m-0">
+                {dashboard.data.hospitals === 0 ? "Set up your first hospital in four steps." : "Finish setting up your hospital."}{" "}
+                <Link className="btn ml-2" href="/onboarding">
+                  {dashboard.data.hospitals === 0 ? "Start" : "Continue"}
+                </Link>
+              </p>
+            )}
+        </Card>
+      )}
 
       {dashboard.loading && <LoadingState />}
       {dashboard.error !== null && <ErrorState error={dashboard.error} onRetry={dashboard.reload} />}
