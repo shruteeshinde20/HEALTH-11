@@ -9,13 +9,14 @@ import json
 import sys
 import types
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.assistant_api import get_language_model
 from app.auth import _password_hash
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.db_session import get_db
 from app.main import app
 from app.models import AuditLog, Scenario, User, UserRole
@@ -208,7 +209,8 @@ def test_model_clarification_is_passed_on(client, db_session, model):
                           "scenario_description": "", "hazards": []})
     body = site.ask("fire in the ward").json()
     assert body == {"clarification": "Which ward do you mean?", "unknown_names": ["the ward"],
-                    "floor_id": site.floor, "method": body["method"], "note": None}
+                    "floor_id": site.floor, "method": body["method"], "note": None,
+                    "data_notice": None}
 
 
 @pytest.mark.parametrize("reply", [None, "text", {"status": "maybe"}, {"status": "scenario", "hazards": [3]}])
@@ -457,3 +459,215 @@ def test_number_check_allows_stored_figures_and_minutes():
     facts = {"evacuation_time_s": 450.0, "people_total": 40}
     assert assistant.unsupported_numbers("40 people out in 7.5 minutes (about 8 min)", facts) == []
     assert assistant.unsupported_numbers("40 people out in 9 minutes", facts) == ["9"]
+
+
+# --- The Gemini adapter, against a stand-in of the documented REST API ------------------
+
+GEMINI_REPLY = {"id": "v1_x", "object": "interaction", "model": "gemini-test", "status": "completed",
+                "steps": [{"type": "model_output",
+                           "content": [{"type": "text", "text": '{"summary": '},
+                                       {"type": "text", "text": '"ok"}'}]}]}
+
+
+def gemini(*answers, retries=2, version="v1"):
+    """A GeminiModel whose HTTP calls go to scripted answers; records requests and waits."""
+    requests, waits = [], []
+
+    def handler(request):
+        requests.append(request)
+        answer = answers[min(len(requests), len(answers)) - 1]
+        if isinstance(answer, Exception):
+            raise answer
+        status, body = answer
+        return httpx.Response(status, json=body) if not isinstance(body, str) else \
+            httpx.Response(status, text=body)
+
+    model = assistant.GeminiModel("AIza-test-key", "gemini-test", timeout=7, max_retries=retries,
+                                  api_version=version, transport=httpx.MockTransport(handler),
+                                  sleep=waits.append)
+    return model, requests, waits
+
+
+def test_gemini_sends_a_documented_structured_output_request():
+    model, requests, _ = gemini((200, GEMINI_REPLY))
+    assert model.complete_json("SYSTEM", "USER", assistant.SUMMARY_SCHEMA, 800) == {"summary": "ok"}
+    request = requests[0]
+    # The stable v1 API by default (https://ai.google.dev/gemini-api/docs/api-versions).
+    assert (request.method, str(request.url)) == (
+        "POST", "https://generativelanguage.googleapis.com/v1/interactions")
+    assert request.headers["x-goog-api-key"] == "AIza-test-key"
+    assert json.loads(request.content) == {
+        "model": "gemini-test", "input": "USER", "system_instruction": "SYSTEM",
+        "response_format": {"type": "text", "mime_type": "application/json",
+                            "schema": assistant.SUMMARY_SCHEMA},
+        "generation_config": {"max_output_tokens": 800},
+        "store": False,  # Google does not keep the request
+    }
+    assert "AIza-test-key" not in request.content.decode() and "key=" not in str(request.url)
+
+
+def google_error(code, status, message):
+    return (code, {"error": {"code": code, "status": status, "message": message}})
+
+
+@pytest.mark.parametrize("answer, status, words", [
+    (google_error(400, "INVALID_ARGUMENT", "API key not valid. Please pass a valid API key."), 503,
+     "check GEMINI_API_KEY"),
+    (google_error(403, "PERMISSION_DENIED", "Permission denied"), 503, "check GEMINI_API_KEY"),
+    (google_error(404, "NOT_FOUND", "models/gemini-test is not found"), 502, "(404)"),
+    (google_error(400, "INVALID_ARGUMENT", "Invalid schema"), 502, "(400)"),
+])
+def test_gemini_errors_are_safe_and_not_retried(answer, status, words):
+    model, requests, waits = gemini(answer)
+    with pytest.raises(assistant.AssistantError) as raised:
+        model.complete_json("S", "U", {}, 10)
+    assert raised.value.status_code == status and words in str(raised.value)
+    assert answer[1]["error"]["message"] in raised.value.detail  # the reason, for the log
+    assert len(requests) == 1 and waits == []
+
+
+def test_gemini_hides_the_key_even_if_the_service_repeats_it():
+    model, _, _ = gemini(google_error(400, "INVALID_ARGUMENT", "Bad key AIza-test-key"))
+    with pytest.raises(assistant.AssistantError) as raised:
+        model.complete_json("S", "U", {}, 10)
+    assert "AIza-test-key" not in raised.value.detail and "[hidden]" in raised.value.detail
+
+
+@pytest.mark.parametrize("failure, words", [
+    (google_error(429, "RESOURCE_EXHAUSTED", "Quota exceeded"), "busy"),
+    (google_error(503, "UNAVAILABLE", "Overloaded"), "(503)"),
+    (httpx.ReadTimeout("slow"), "did not answer in time"),
+    (httpx.ConnectError("no route"), "could not be reached"),
+])
+def test_gemini_retries_temporary_failures_then_gives_up(failure, words):
+    model, requests, waits = gemini(failure)
+    with pytest.raises(assistant.AssistantError) as raised:
+        model.complete_json("S", "U", {}, 10)
+    assert raised.value.status_code in (502, 503) and words in str(raised.value)
+    assert len(requests) == 3 and waits == [1, 2]
+
+
+def test_gemini_uses_the_stable_v1_api_by_default():
+    assert settings().gemini_api_version == "v1"
+    assert assistant.GeminiModel("k", "m", timeout=1)._url == \
+        "https://generativelanguage.googleapis.com/v1/interactions"
+
+
+def test_gemini_api_version_can_be_v1beta_and_nothing_else():
+    model, requests, _ = gemini((200, GEMINI_REPLY), version="v1beta")
+    model.complete_json("S", "U", {}, 10)
+    assert str(requests[0].url) == "https://generativelanguage.googleapis.com/v1beta/interactions"
+    with pytest.raises(ValueError):
+        assistant.GeminiModel("k", "m", timeout=1, api_version="v2")
+    assert settings(gemini_api_version="V1BETA").gemini_api_version == "v1beta"
+    with pytest.raises(ValueError):
+        settings(gemini_api_version="v2")
+    chosen = assistant.configured_model(settings(ai_provider="gemini", gemini_api_key="AIza-k",
+                                                 gemini_model="m", gemini_api_version="v1beta"))
+    assert chosen._url.endswith("/v1beta/interactions")
+
+
+def test_gemini_closes_its_connection_after_each_answer(monkeypatch):
+    clients = []
+    real_init = httpx.Client.__init__
+
+    def spy(self, *args, **kwargs):
+        real_init(self, *args, **kwargs)
+        clients.append(self)
+
+    monkeypatch.setattr(httpx.Client, "__init__", spy)
+    model, _, _ = gemini((200, GEMINI_REPLY))
+    model.complete_json("S", "U", {}, 10)
+    model.complete_json("S", "U", {}, 10)
+    assert len(clients) == 2 and all(c.is_closed for c in clients)
+
+
+def test_gemini_reads_only_the_model_output_step():
+    # Other steps (for example a function call or a summary of the model's
+    # thinking) are never mixed into the answer.
+    body = {**GEMINI_REPLY, "steps": [{"type": "thought", "content": [{"type": "text", "text": "hmm "}]},
+                                      *GEMINI_REPLY["steps"]]}
+    model, _, _ = gemini((200, body))
+    assert model.complete_json("S", "U", {}, 10) == {"summary": "ok"}
+
+
+def test_gemini_recovers_when_a_retry_succeeds():
+    model, requests, waits = gemini(google_error(429, "RESOURCE_EXHAUSTED", "Quota"), (200, GEMINI_REPLY))
+    assert model.complete_json("S", "U", {}, 10) == {"summary": "ok"}
+    assert len(requests) == 2 and waits == [1]
+
+
+@pytest.mark.parametrize("body, words", [
+    ({**GEMINI_REPLY, "status": "incomplete"}, "could not complete"),  # cut off, even if it parses
+    ({**GEMINI_REPLY, "status": "failed", "errors": [{"code": 13}]}, "could not complete"),
+    ({**GEMINI_REPLY, "steps": []}, "unexpected format"),
+    ({**GEMINI_REPLY, "steps": [{"type": "model_output",
+                                 "content": [{"type": "text", "text": "not json"}]}]}, "unexpected format"),
+    ("<html>proxy error</html>", "unexpected format"),
+])
+def test_gemini_rejects_unusable_answers(body, words):
+    model, _, _ = gemini((200, body))
+    with pytest.raises(assistant.AssistantError) as raised:
+        model.complete_json("S", "U", {}, 10)
+    assert words in str(raised.value)
+
+
+# --- Choosing the provider ----------------------------------------------------------------------
+
+def settings(**values):
+    return Settings(_env_file=None, **values)
+
+
+def test_provider_setting_picks_the_adapter_and_explains_what_is_missing():
+    chosen = assistant.configured_model(settings(ai_provider="Gemini", gemini_api_key="AIza-k",
+                                                 gemini_model="gemini-test"))
+    assert isinstance(chosen, assistant.GeminiModel)
+    with pytest.raises(assistant.AssistantError) as raised:
+        assistant.configured_model(settings(ai_provider="gemini", anthropic_api_key="sk",
+                                            anthropic_model="claude-sonnet-5-5"))
+    assert raised.value.status_code == 503 and "GEMINI_API_KEY" in str(raised.value)
+    with pytest.raises(assistant.AssistantError) as raised:
+        assistant.configured_model(settings(ai_provider="anthropic"))
+    assert "ANTHROPIC_API_KEY" in str(raised.value)
+    with pytest.raises(ValueError):
+        settings(ai_provider="openai")
+
+
+def test_free_gemini_tier_is_flagged_and_blocked_in_production():
+    assert assistant.data_notice(settings(ai_provider="gemini")) == assistant.FREE_TIER_NOTICE
+    assert assistant.data_notice(settings(ai_provider="gemini", gemini_free_tier=False)) is None
+    assert assistant.data_notice(settings(ai_provider="anthropic")) is None
+    production = {"environment": "production", "jwt_secret_key": "p" * 40,
+                  "database_url": "postgresql+psycopg://u:strong@db:5432/health11"}
+    with pytest.raises(ValueError, match="free Gemini API tier"):
+        settings(ai_provider="gemini", **production)
+    assert settings(ai_provider="gemini", gemini_free_tier=False, **production).ai_provider == "gemini"
+
+
+def test_answers_carry_the_free_tier_notice(client, db_session, model, monkeypatch):
+    monkeypatch.setattr(get_settings(), "ai_provider", "gemini")
+    monkeypatch.setattr(get_settings(), "gemini_free_tier", True)
+    site = Site(client, db_session, "Notice Org")
+    model.replies.append(scenario_reply(("Ward A", "fire", 3, 0)))
+    assert site.ask("fire in ward a").json()["data_notice"] == assistant.FREE_TIER_NOTICE
+    run_id, _ = simulated_run(site)
+    model.replies.append({"summary": "This is a simulation result for planning and training."})
+    body = client.post(f"{API}/assistant/summary", headers=site.headers, json={"run_id": run_id}).json()
+    assert body["data_notice"] == assistant.FREE_TIER_NOTICE
+
+
+def test_missing_gemini_configuration_is_explained(db_session, monkeypatch):
+    monkeypatch.setattr(get_settings(), "ai_provider", "gemini")
+    monkeypatch.setattr(get_settings(), "gemini_api_key", None)
+
+    def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as test_client:
+            response = Site(test_client, db_session, "No Gemini Org").ask("fire in ward a")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 503
+    assert "GEMINI_API_KEY" in response.json()["error"]["message"]

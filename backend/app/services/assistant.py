@@ -22,6 +22,7 @@ Safety rules, enforced in this code (not only in the prompt)
 
 import json
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -361,3 +362,156 @@ class AnthropicModel:
             return json.loads(text)
         except (TypeError, ValueError) as exc:
             raise AssistantError("The assistant gave an answer in an unexpected format") from exc
+
+
+# --- Gemini adapter ------------------------------------------------------------------------
+
+GEMINI_API_VERSIONS = ("v1", "v1beta")
+
+
+def gemini_interactions_url(version: str) -> str:
+    if version not in GEMINI_API_VERSIONS:
+        raise ValueError("GEMINI_API_VERSION must be v1 or v1beta")
+    return f"https://generativelanguage.googleapis.com/{version}/interactions"
+
+
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+
+class GeminiModel:
+    """Calls the Gemini Interactions API over HTTPS with structured output
+    (response_format with a JSON schema), as documented at
+    https://ai.google.dev/gemini-api/docs/structured-output (REST examples) and
+    https://ai.google.dev/api/interactions-api. Uses httpx, which the project
+    already pins, so no extra package is needed.
+
+    store=false: Google does not keep the request for later retrieval.
+    API version: v1 (stable; "the Interactions API and its core features are
+    generally available in v1", https://ai.google.dev/gemini-api/docs/api-versions).
+    v1beta can be chosen with GEMINI_API_VERSION. scripts/check_assistant.py
+    verifies the setup against the real service.
+    """
+
+    def __init__(self, api_key: str, model: str, timeout: float, max_retries: int = 2,
+                 api_version: str = "v1", transport=None, sleep=time.sleep):
+        import httpx
+
+        self._httpx = httpx
+        self._url = gemini_interactions_url(api_version)
+        self._timeout = timeout
+        self._transport = transport
+        self._api_key = api_key
+        self._model = model
+        self._max_retries = max_retries
+        self._sleep = sleep
+
+    def _hide(self, text: str) -> str:
+        return text.replace(self._api_key, "[hidden]") if self._api_key else text
+
+    def _status_error(self, response) -> AssistantError:
+        code, status, message = response.status_code, None, None
+        try:
+            error = response.json().get("error")
+        except (ValueError, AttributeError):
+            error = None
+        if isinstance(error, dict):
+            status, message = error.get("status"), error.get("message")
+        detail = self._hide(" | ".join(str(p)[:500] for p in (f"HTTP {code}", status, message) if p))
+        if code in (401, 403) or (code == 400 and "api key" in str(message).lower()):
+            return AssistantError("The AI service rejected the API key; check GEMINI_API_KEY", 503, detail)
+        if code == 429:
+            return AssistantError("The AI service is busy; try again in a minute", 503, detail)
+        return AssistantError(f"The AI service returned an error ({code})", 502, detail)
+
+    def complete_json(self, system: str, user_content: str, schema: dict, max_tokens: int) -> dict:
+        httpx = self._httpx
+        body = {
+            "model": self._model,
+            "input": user_content,
+            "system_instruction": system,
+            "response_format": {"type": "text", "mime_type": "application/json", "schema": schema},
+            "generation_config": {"max_output_tokens": max_tokens},
+            "store": False,
+        }
+        headers = {"x-goog-api-key": self._api_key, "Content-Type": "application/json"}
+        # One short-lived connection pool per answer, closed afterwards.
+        with httpx.Client(timeout=self._timeout, transport=self._transport) as client:
+            return self._send(client, headers, body)
+
+    def _send(self, client, headers: dict, body: dict) -> dict:
+        httpx = self._httpx
+        last_error = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                response = client.post(self._url, headers=headers, json=body)
+            except httpx.TimeoutException as exc:
+                last_error = AssistantError("The AI service did not answer in time; try again", 503,
+                                            self._hide(type(exc).__name__))
+            except httpx.HTTPError as exc:
+                last_error = AssistantError("The AI service could not be reached", 503,
+                                            self._hide(f"{type(exc).__name__}: {exc}"[:500]))
+            else:
+                if response.status_code < 400:
+                    return self._parse(response)
+                last_error = self._status_error(response)
+                if response.status_code not in _RETRY_STATUSES:
+                    raise last_error
+            if attempt < self._max_retries:
+                self._sleep(2 ** attempt)
+        raise last_error
+
+    def _parse(self, response) -> dict:
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise AssistantError("The assistant gave an answer in an unexpected format") from exc
+        status = data.get("status") if isinstance(data, dict) else None
+        if status != "completed":
+            errors = data.get("errors") if isinstance(data, dict) else None
+            raise AssistantError("The assistant could not complete an answer; try rephrasing",
+                                 detail=self._hide(f"status {status} | errors {errors}"[:500]))
+        texts = []
+        for step in data.get("steps") or []:
+            if isinstance(step, dict) and step.get("type") == "model_output":
+                texts += [item.get("text", "") for item in step.get("content") or []
+                          if isinstance(item, dict) and item.get("type") == "text"]
+        try:
+            return json.loads("".join(texts))
+        except (TypeError, ValueError) as exc:
+            raise AssistantError("The assistant gave an answer in an unexpected format") from exc
+
+
+# --- Choosing the provider --------------------------------------------------------------------
+
+PROVIDERS = ("anthropic", "gemini")
+FREE_TIER_NOTICE = (
+    "Free Gemini API tier: Google may use what is sent to improve its products. "
+    "Use made-up data only; do not type patient names or other personal details."
+)
+
+
+def data_notice(settings) -> str | None:
+    """Shown with every assistant answer while a free tier is configured."""
+    if settings.ai_provider == "gemini" and settings.gemini_free_tier:
+        return FREE_TIER_NOTICE
+    return None
+
+
+def configured_model(settings) -> LanguageModel:
+    """The model chosen by AI_PROVIDER in .env. Raises AssistantError (503) with
+    the setting to fix when something is missing; never includes the key."""
+    if settings.ai_provider == "gemini":
+        key = settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else ""
+        if not key or not settings.gemini_model:
+            raise AssistantError("The AI assistant is not configured: set GEMINI_API_KEY and "
+                                 "GEMINI_MODEL in .env", 503)
+        return GeminiModel(key, settings.gemini_model, timeout=settings.assistant_timeout_seconds,
+                           api_version=settings.gemini_api_version)
+    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else ""
+    if not key or not settings.anthropic_model:
+        raise AssistantError("The AI assistant is not configured: set ANTHROPIC_API_KEY and "
+                             "ANTHROPIC_MODEL in .env", 503)
+    try:
+        return AnthropicModel(key, settings.anthropic_model, timeout=settings.assistant_timeout_seconds)
+    except ImportError as exc:
+        raise AssistantError("The anthropic package is not installed", 503) from exc

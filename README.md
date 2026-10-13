@@ -240,7 +240,7 @@ Priority parameters (defaults "assumed, to be validated"): weights
 `priority_weight_hazard` 0.3; mobility factors ambulatory 0, wheelchair 0.5,
 stretcher 0.8, ventilator 1.0; `priority_hazard_distance_m` 50.
 
-## AI assistant (Anthropic Claude)
+## AI assistant (Anthropic Claude or Google Gemini)
 
 | Endpoint | What it does | Who |
 |---|---|---|
@@ -262,9 +262,17 @@ Safety rules built in:
 - Limited to `ASSISTANT_MAX_REQUESTS_PER_USER` (default 20) requests per user per
   `ASSISTANT_WINDOW_SECONDS` (default 600).
 
-Setup: put `ANTHROPIC_API_KEY` and `ANTHROPIC_MODEL` in `.env` (never in code or
-chat). Without them the endpoints answer `503` with an explanation. Check the
-setup with one real (billed) request — the key is never printed:
+Choose the AI service with `AI_PROVIDER` in `.env` (never put keys in code or
+chat). Without a key and model the endpoints answer `503` with an explanation.
+All the safety rules above are in HEALTH-11's own code, so they apply to both.
+
+| `AI_PROVIDER` | Settings | Notes |
+|---|---|---|
+| `anthropic` (default) | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Paid API credits (separate from a Claude chat subscription) |
+| `gemini` | `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FREE_TIER`, `GEMINI_API_VERSION` (`v1` default, or `v1beta`) | Key from Google AI Studio. On the **free tier** Google may use what is sent to improve its products: every answer then carries a `data_notice`, use made-up data only, and the server refuses to start in production. Set `GEMINI_FREE_TIER=false` only for a paid (billing-enabled) key. |
+
+Check the setup with one real request — the key is never printed, and on failure
+the service's own reason is shown:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\check_assistant.py

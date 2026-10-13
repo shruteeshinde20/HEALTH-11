@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 Db = Annotated[Session, Depends(get_db)]
 
 METHOD_DRAFT = (
-    "A large language model (Anthropic Claude, model set in ANTHROPIC_MODEL) reads your text "
+    "A large language model (provider and model set in .env: AI_PROVIDER) reads your text "
     "and the place names of the selected floor only. Every place in its answer is checked "
     "against the database; anything missing or unclear becomes a question instead of a "
     "guess. Nothing is saved or run until you press Run it."
@@ -62,20 +62,10 @@ class SummaryRequest(BaseModel):
 
 def get_language_model() -> assistant.LanguageModel:
     """The configured model; tests replace this dependency with a stand-in."""
-    settings = get_settings()
-    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else ""
-    if not key or not settings.anthropic_model:
-        raise HTTPException(
-            status_code=503,
-            detail="The AI assistant is not configured: set ANTHROPIC_API_KEY and "
-                   "ANTHROPIC_MODEL in .env",
-        )
     try:
-        return assistant.AnthropicModel(key, settings.anthropic_model,
-                                        timeout=settings.assistant_timeout_seconds)
-    except ImportError as exc:
-        raise HTTPException(status_code=503,
-                            detail="The anthropic package is not installed") from exc
+        return assistant.configured_model(get_settings())
+    except assistant.AssistantError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 Model = Annotated[assistant.LanguageModel, Depends(get_language_model)]
@@ -120,6 +110,7 @@ def draft_scenario(payload: DraftRequest, db: Db, user: Editor, model: Model, re
                           "outcome": "scenario" if "scenario" in result else "clarification"})
     db.commit()
     return {**result, "floor_id": floor.id, "method": METHOD_DRAFT,
+            "data_notice": assistant.data_notice(get_settings()),
             "note": "Nothing has been saved or run. Check the draft, then press Run it."
             if "scenario" in result else None}
 
@@ -140,4 +131,5 @@ def summarise_run(payload: SummaryRequest, db: Db, user: Reader, model: Model, r
                  action="assistant.summary", entity_type="simulation_run", entity_id=run.id,
                  request=request, details={"source": result["source"]})
     db.commit()
-    return {**result, "run_id": run.id, "facts": facts, "method": METHOD_SUMMARY}
+    return {**result, "run_id": run.id, "facts": facts, "method": METHOD_SUMMARY,
+            "data_notice": assistant.data_notice(get_settings())}

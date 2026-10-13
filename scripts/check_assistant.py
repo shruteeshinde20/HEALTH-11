@@ -3,10 +3,10 @@
 Run from the project folder:
     .\\.venv\\Scripts\\python.exe scripts\\check_assistant.py
 
-It reads ANTHROPIC_API_KEY and ANTHROPIC_MODEL from .env, sends one short
+It reads AI_PROVIDER and that provider's key and model from .env, sends one short
 made-up request (no database, no patient data) and checks that the answer
 passes the same checks the API uses. The key is never printed.
-Each run is one billed API request.
+Each run is one API request (billed, or counted against a free-tier limit).
 """
 
 import sys
@@ -24,21 +24,22 @@ TEXT = "Fire in ward a, severity 3, spreading about 2 metres per minute."
 
 def main() -> int:
     settings = get_settings()
-    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else ""
-    if not key or key.startswith("replace_with"):
-        print("FAILED: ANTHROPIC_API_KEY is not set in .env")
+    provider = settings.ai_provider
+    secret = settings.gemini_api_key if provider == "gemini" else settings.anthropic_api_key
+    if secret and secret.get_secret_value().startswith("replace_with"):
+        print(f"FAILED: {provider.upper()}_API_KEY in .env is still the placeholder")
         return 1
-    if not settings.anthropic_model:
-        print("FAILED: ANTHROPIC_MODEL is not set in .env")
-        return 1
-    print(f"Model: {settings.anthropic_model}  (API key loaded from .env, not shown)")
-
     try:
-        model = assistant.AnthropicModel(key, settings.anthropic_model,
-                                         timeout=settings.assistant_timeout_seconds)
-    except ImportError:
-        print("FAILED: the anthropic package is not installed; run pip install -r requirements.txt")
+        model = assistant.configured_model(settings)
+    except assistant.AssistantError as exc:
+        print(f"FAILED: {exc}")
         return 1
+    name = settings.gemini_model if provider == "gemini" else settings.anthropic_model
+    version = f", API version: {settings.gemini_api_version}" if provider == "gemini" else ""
+    print(f"Provider: {provider}, model: {name}{version}  (API key loaded from .env, not shown)")
+    notice = assistant.data_notice(settings)
+    if notice:
+        print(f"Note: {notice}")
     try:
         reply = model.complete_json(
             system=assistant.DRAFT_SYSTEM_PROMPT,

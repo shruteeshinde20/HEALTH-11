@@ -36,9 +36,17 @@ class Settings(BaseSettings):
     # Where trained machine-learning models are stored (one folder per organization).
     model_dir: Path = PROJECT_ROOT / "var" / "models"
 
-    # AI assistant (Anthropic API). Both must be set in .env; never in code.
+    # AI assistant. AI_PROVIDER picks the service; its key and model must be set
+    # in .env, never in code.
+    ai_provider: str = "anthropic"
     anthropic_api_key: SecretStr | None = None
     anthropic_model: str | None = None
+    gemini_api_key: SecretStr | None = None
+    gemini_model: str | None = None
+    gemini_api_version: str = "v1"
+    # True while using Google's free API tier, where Google may use what is sent
+    # to improve its products. Not allowed in production.
+    gemini_free_tier: bool = True
     assistant_timeout_seconds: float = 30.0
     assistant_max_requests_per_user: int = 20
     assistant_window_seconds: int = 600
@@ -90,6 +98,22 @@ class Settings(BaseSettings):
             )
         return origins
 
+    @field_validator("ai_provider")
+    @classmethod
+    def validate_ai_provider(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"anthropic", "gemini"}:
+            raise ValueError("AI_PROVIDER must be anthropic or gemini")
+        return value
+
+    @field_validator("gemini_api_version")
+    @classmethod
+    def validate_gemini_api_version(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"v1", "v1beta"}:
+            raise ValueError("GEMINI_API_VERSION must be v1 or v1beta")
+        return value
+
     @field_validator("environment")
     @classmethod
     def validate_environment(cls, value: str) -> str:
@@ -110,6 +134,12 @@ class Settings(BaseSettings):
             if "replace_me" in self.resolved_database_url.lower():
                 raise ValueError(
                     "Configure a valid database password and URL in production"
+                )
+            if self.ai_provider == "gemini" and self.gemini_free_tier:
+                raise ValueError(
+                    "The free Gemini API tier may use what is sent to improve Google's products "
+                    "and cannot be used in production; use a paid tier (GEMINI_FREE_TIER=false) "
+                    "or another AI_PROVIDER"
                 )
         return self
 
