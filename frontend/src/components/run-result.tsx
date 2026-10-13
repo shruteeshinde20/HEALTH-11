@@ -15,9 +15,10 @@ import { Tag } from "./ui.tsx";
 const peoplePage = APP_PAGES.find((page) => page.href === "/people");
 const livePage = APP_PAGES.find((page) => page.href === "/live");
 
-export function RunResult({ result, showAlgorithm = false, children }: {
+export function RunResult({ result, showAlgorithm = false, showLive = true, children }: {
   result: RunDetail;
   showAlgorithm?: boolean;
+  showLive?: boolean;        // false on the Live Simulation page itself
   children?: ReactNode;      // extra buttons after the report links
 }) {
   const summary = result.summary;
@@ -43,7 +44,7 @@ export function RunResult({ result, showAlgorithm = false, children }: {
         </>
       )}
       <p className="flex flex-wrap gap-2">
-        {livePage?.ready && <Link className="btn" href={`${livePage.href}?run=${result.id}`}>Watch it live</Link>}
+        {showLive && livePage?.ready && <Link className="btn" href={`${livePage.href}?run=${result.id}`}>Watch it live</Link>}
         <a className="btn l" href={`/api/backend/reports/${result.id}?format=pdf`} download>Report (PDF)</a>
         <a className="btn l" href={`/api/backend/reports/${result.id}?format=csv`} download>Report (CSV)</a>
         {children}

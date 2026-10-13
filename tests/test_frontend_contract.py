@@ -2,11 +2,13 @@
 against the real API. If the website and the API drift apart, this fails.
 
 Covers the Facility Manager and the onboarding wizard (Phase 10, group 1) and
-the Graph Builder and Scenario Builder (group 2).
+the Graph Builder and Scenario Builder (group 2), and Live Simulation and
+Algorithm Comparison (group 3).
 """
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.db_session import get_db
 from app.main import app
@@ -295,3 +297,83 @@ def test_staff_users_only_read_graphs_and_scenarios(client):
     call(client, staff, "PATCH", f"/nodes/{ward['id']}", 403, json={"x": 1, "y": 1})
     call(client, staff, "POST", "/scenarios", 403, json={"name": "No", "hazards": []})
     assert building["id"]
+
+
+def _site_with_people(client, h):
+    building, (ground, first) = _building_with_two_floors(client, h)
+    ward = place(client, h, ground["id"], "Ward A", "ward")
+    corridor = place(client, h, ground["id"], "C1", "corridor", x=40)
+    exit_ = place(client, h, ground["id"], "Exit 1", "exit", x=80)
+    for a, b in ((ward, corridor), (corridor, exit_)):
+        call(client, h, "POST", "/edges", 201, json={"from_node_id": a["id"], "to_node_id": b["id"], **PATH})
+    for i in range(3):
+        call(client, h, "POST", "/staff", 201, json={"staff_code": f"S{i}", "full_name": f"Nurse {i}",
+                                                     "role": "nurse", "node_id": ward["id"]})
+    scenario = call(client, h, "POST", "/scenarios", 201, json={"name": "Live drill", "hazards": []}).json()
+    return building, ground, {"ward": ward, "corridor": corridor, "exit": exit_}, scenario
+
+
+def test_live_simulation_requests(client):
+    h = admin(client)
+    building, ground, places, scenario = _site_with_people(client, h)
+    run_id = call(client, h, "POST", "/simulate", 201, json={
+        "scenario_id": scenario["id"], "algorithm": "astar", "building_id": building["id"]}).json()["run_id"]
+
+    # The run picker (useApi, limit 50) and the run with its map.
+    runs = call(client, h, "GET", "/simulation_runs", 200, params={"limit": 50}).json()
+    assert runs["items"][0]["id"] == run_id
+    run = call(client, h, "GET", f"/simulation_runs/{run_id}", 200).json()
+    assert {n["name"] for n in run["map"]["nodes"]} == {"Ward A", "C1", "Exit 1"}
+    assert {n["floor_id"] for n in run["map"]["nodes"]} == {ground["id"]}
+    assert run["injected_hazards"] == []
+
+    # /api/session/stream asks for a stream token with no body, then the browser opens the URL
+    # (speed is one of STREAM_SPEEDS in frontend/src/lib/shared/live.ts).
+    issued = call(client, h, "POST", f"/simulations/{run_id}/stream-token", 200).json()
+    with client.websocket_connect(f"{API}/ws/simulations/{run_id}?token={issued['token']}&speed=60") as ws:
+        first = ws.receive_json()
+        # Every field parseStreamMessage() reads.
+        assert {"t", "total", "evacuated", "active", "needs_assistance", "reached_by_hazard",
+                "blocked_nodes", "congested_edges", "exit_load", "done", "positions"} <= set(first)
+        assert first["total"] == 3
+        assert {"id", "x", "y", "floor_id", "mobility", "status"} <= set(first["positions"][0])
+        ws.send_json({"action": "pause"})
+        reply = ws.receive_json()
+        while "status" not in reply:
+            reply = ws.receive_json()
+        assert reply["status"] == "paused" and isinstance(reply["t"], (int, float))
+        ws.send_json({"action": "resume"})
+        frames = [ws.receive_json()]
+        while not frames[-1].get("done"):
+            frames.append(ws.receive_json())
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_json()
+    assert closed.value.code == 1000
+    assert frames[-1]["evacuated"] == 3
+    assert set(frames[-1]["exit_load"]) == {str(places["exit"]["id"])}   # exit ids as text keys
+
+    # AddHazard: name from hazardName(), at_seconds from the form (empty = now, rounded up).
+    added = call(client, h, "POST", f"/simulations/{run_id}/hazards", 201, json={
+        "name": "Fire at C1", "type": "fire", "origin_node_id": places["corridor"]["id"],
+        "severity": 3, "spread_rate": 0, "at_seconds": 5}).json()
+    assert added["run_id"] == run_id and added["summary"]["total"] == 3
+    after = call(client, h, "GET", f"/simulation_runs/{run_id}", 200).json()
+    assert [z["name"] for z in after["injected_hazards"]] == ["Fire at C1"]
+
+
+def test_algorithm_comparison_requests(client):
+    h = admin(client)
+    building, _ground, _places, scenario = _site_with_people(client, h)
+    rows = call(client, h, "POST", "/compare", 200,
+                json={"scenario_id": scenario["id"], "building_id": building["id"]}).json()
+    # Every field of the Comparison type, for the four algorithms the page explains.
+    assert [r["algorithm"] for r in rows] == ["bfs", "dfs", "dijkstra", "astar"]
+    assert all(set(r) == {"algorithm", "evacuation_time_s", "distance_m", "risk", "all_evacuated",
+                          "evacuated", "total", "needs_assistance", "reached_by_hazard"} for r in rows)
+    assert all(r["total"] == 3 and r["all_evacuated"] for r in rows)
+    # Nothing was saved by comparing.
+    assert call(client, h, "GET", "/simulation_runs", 200, params={"limit": 1}).json()["total"] == 0
+    # "Run and watch" saves a run with the chosen algorithm.
+    run_id = call(client, h, "POST", "/simulate", 201, json={
+        "scenario_id": scenario["id"], "algorithm": "bfs", "building_id": building["id"]}).json()["run_id"]
+    assert call(client, h, "GET", f"/simulation_runs/{run_id}", 200).json()["algorithm"] == "bfs"

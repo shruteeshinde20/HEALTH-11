@@ -524,3 +524,69 @@ def test_websocket_replays_hazards_added_to_the_run(client, db_session):
     assert first_blocked == 4  # frame after the tick that starts at 3 s
     summary = client.get(f"{API}/simulation_runs/{run_id}", headers=site.headers).json()["summary"]
     assert frames[-1]["t"] == summary["evacuation_time_s"]
+
+
+# --- Stream tokens and the run map (Phase 10, group 3: Live Simulation page) -----------------
+
+def test_stream_token_opens_only_the_stream_of_its_own_run(client, db_session):
+    site = Site(client, db_session, "Ticket Org", walkers=1)
+    run_id = site.post("/simulate", {"scenario_id": site.scenario("D"),
+                                     "building_id": site.building["id"]})["run_id"]
+    other_run = site.post("/simulate", {"scenario_id": site.scenario("E"),
+                                        "building_id": site.building["id"]})["run_id"]
+    staff, _ = site.member(UserRole.STAFF_USER, "viewer@example.com")
+
+    # Any signed-in user of the organization may watch, so Staff Users get one too.
+    issued = site.post(f"/simulations/{run_id}/stream-token", {}, expect=200, headers=staff)
+    from app.config import get_settings
+    assert issued["expires_in"] == get_settings().stream_token_expire_seconds and issued["token"]
+    with client.websocket_connect(ws_url(run_id, issued["token"])) as ws:
+        assert ws.receive_json()["t"] == 0
+
+    # Another run of the same organization: refused like a bad token.
+    with client.websocket_connect(ws_url(other_run, issued["token"])) as ws:
+        assert ws.receive_json()["error"]["message"] == "This token is for another simulation run"
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_json()
+    assert closed.value.code == 4401
+
+    # It is not an access token: the REST API refuses it.
+    bearer = {"Authorization": f"Bearer {issued['token']}"}
+    assert client.get(f"{API}/simulation_runs/{run_id}", headers=bearer).status_code == 401
+
+    # Another organization cannot get one for this run (reported as missing).
+    other = Site(client, db_session, "Ticket Other Org", walkers=0)
+    assert client.post(f"{API}/simulations/{run_id}/stream-token", headers=other.headers).status_code == 404
+    assert client.post(f"{API}/simulations/{run_id}/stream-token").status_code == 401
+
+
+def test_expired_stream_tokens_are_refused(client, db_session, monkeypatch):
+    from app.config import get_settings
+
+    site = Site(client, db_session, "Expired Ticket Org", walkers=1)
+    run_id = site.post("/simulate", {"scenario_id": site.scenario("D"),
+                                     "building_id": site.building["id"]})["run_id"]
+    monkeypatch.setattr(get_settings(), "stream_token_expire_seconds", -1)
+    token = site.post(f"/simulations/{run_id}/stream-token", {}, expect=200)["token"]
+    with client.websocket_connect(ws_url(run_id, token)) as ws:
+        assert ws.receive_json()["error"]["message"] == "Invalid or expired token"
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_json()
+    assert closed.value.code == 4401
+
+
+def test_run_detail_includes_the_building_map_without_people(client, db_session):
+    site = Site(client, db_session, "Map Org", walkers=2)
+    run_id = site.post("/simulate", {"scenario_id": site.scenario("Fire C1", [("C1", {})]),
+                                     "algorithm": "astar"})["run_id"]
+    # Renaming a place later does not change the map of a past run.
+    assert client.patch(f"{API}/nodes/{site.ids['C1']}", headers=site.headers,
+                        json={"name": "Renamed"}).status_code == 200
+    run = client.get(f"{API}/simulation_runs/{run_id}", headers=site.headers).json()
+    drawn = run["map"]
+    assert drawn["building_id"] == site.building["id"]
+    assert {n["name"] for n in drawn["nodes"]} == {name for name, _ in SPEC_NODES}
+    assert all(set(n) == {"id", "name", "type", "x", "y", "floor_id", "is_blocked"} for n in drawn["nodes"])
+    assert all(set(e) == {"id", "from_node_id", "to_node_id", "is_blocked"} for e in drawn["edges"])
+    assert len(drawn["edges"]) == len(SPEC_EDGES)
+    assert "Nurse" not in str(drawn) and "agents" not in drawn

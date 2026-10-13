@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # backend/app/config.py -> project root. Using an absolute path means the
@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    # Lifetime of the one-run token the website uses to open a live
+    # simulation stream (WebSocket). Short, because it travels in a URL.
+    stream_token_expire_seconds: Annotated[int, Field(ge=10, le=600)] = 60
     # Accepts a comma-separated list (http://a,http://b) or a JSON list.
     cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:3000",

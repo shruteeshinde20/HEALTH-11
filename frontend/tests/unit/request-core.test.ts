@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { backendPath, clientIp, isSameOrigin, isUnsafeMethod } from "../../src/lib/server/request-core.ts";
+import {
+  backendPath, clientIp, isSameOrigin, isUnsafeMethod, publicWsBase, streamUrl,
+} from "../../src/lib/server/request-core.ts";
 
 test("only same-site pages may change data", () => {
   assert.equal(isSameOrigin({ origin: "https://evac.example.org", host: "evac.example.org", secFetchSite: "same-origin" }), true);
@@ -24,7 +26,23 @@ test("token endpoints and odd paths are never passed to the backend", () => {
   assert.equal(backendPath(["floors", "12", "route"]), "/floors/12/route");
   assert.equal(backendPath(["auth", "me"]), "/auth/me");
   for (const blocked of [["auth", "login"], ["auth", "refresh"], ["auth", "logout"], ["auth", "register-organization"],
-                         ["auth"], ["..", "health"], ["floors", "a%2Fb"], ["floors", ""], [], ["a b"]]) {
+                         ["auth"], ["simulations", "4", "stream-token"], ["..", "health"], ["floors", "a%2Fb"], ["floors", ""], [], ["a b"]]) {
     assert.equal(backendPath(blocked), null, JSON.stringify(blocked));
+  }
+});
+
+test("live streams use the public WebSocket address of the backend", () => {
+  assert.equal(publicWsBase("http://127.0.0.1:8000", undefined), "ws://127.0.0.1:8000");
+  assert.equal(publicWsBase("https://api.example.org/", ""), "wss://api.example.org");
+  assert.equal(publicWsBase("http://backend:8000", " wss://evac.example.org/ "), "wss://evac.example.org");
+  assert.equal(publicWsBase("http://backend:8000", "https://evac.example.org"), null);
+  assert.equal(publicWsBase("http://backend:8000", "not a url"), null);
+});
+
+test("a stream address is built only for a real run id and an offered speed", () => {
+  assert.equal(streamUrl("ws://127.0.0.1:8000", 12, "a.b+c/=", 10),
+               "ws://127.0.0.1:8000/api/v1/ws/simulations/12?token=a.b%2Bc%2F%3D&speed=10");
+  for (const [runId, speed] of [[0, 10], [-1, 10], [1.5, 10], ["3", 10], [3, 7], [3, "10"], [3, 0]] as const) {
+    assert.equal(streamUrl("ws://x", runId, "t", speed), null, JSON.stringify([runId, speed]));
   }
 });

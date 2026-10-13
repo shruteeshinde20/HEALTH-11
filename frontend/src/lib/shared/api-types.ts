@@ -1,6 +1,8 @@
 // Response shapes of the HEALTH-11 API (backend/app/*_api.py), only the
 // fields the website reads.
 
+import type { RunMap } from "./live.ts";
+
 export type Role = "Administrator" | "Emergency Commander" | "Staff User";
 
 export type User = {
@@ -126,6 +128,31 @@ export type Scenario = {
   updated_at: string;
 };
 
+export type InjectedHazard = {
+  id: number;
+  name: string;
+  type: HazardType;
+  origin_node_id: number;
+  severity: number;
+  spread_rate: number;
+  start_minutes: number;
+};
+
 export type RunDetail = RunSummary & {
   recommendations: { severity: string; text: string }[];
+  injected_hazards: InjectedHazard[];
+  map: RunMap;
+};
+
+/** One row of POST /compare. */
+export type Comparison = {
+  algorithm: string;
+  evacuation_time_s: number | null;
+  distance_m: number | null;
+  risk: number | null;
+  all_evacuated: boolean;
+  evacuated: number;
+  total: number;
+  needs_assistance: number;
+  reached_by_hazard: number;
 };

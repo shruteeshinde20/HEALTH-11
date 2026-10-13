@@ -1,5 +1,7 @@
 // Request checks for the website's server routes. Pure functions, unit-tested.
 
+import { STREAM_SPEEDS } from "../shared/live.ts";
+
 /** Largest request body passed on to the backend (floor imports are up to 5 MiB). */
 export const MAX_BODY_BYTES = 6 * 1024 * 1024;
 
@@ -50,7 +52,37 @@ export function backendPath(segments: string[]): string | null {
     if (!SEGMENT.test(segment) || segment === "." || segment === "..") return null;
   }
   if (segments[0] === "auth" && !(segments.length === 2 && segments[1] === "me")) return null;
+  // Live-stream tokens are only handed out by /api/session/stream, already inside a URL.
+  if (segments.includes("stream-token")) return null;
   return "/" + segments.join("/");
+}
+
+/**
+ * The WebSocket base URL browsers use to reach the backend: the configured
+ * public URL, or else BACKEND_URL with ws:// / wss://. Null if invalid.
+ */
+export function publicWsBase(backendUrl: string, configured: string | undefined): string | null {
+  const raw = (configured ?? "").trim().replace(/\/+$/, "");
+  try {
+    if (raw) {
+      const url = new URL(raw);
+      return url.protocol === "ws:" || url.protocol === "wss:" ? raw : null;
+    }
+    const backend = new URL(backendUrl);
+    if (backend.protocol !== "http:" && backend.protocol !== "https:") return null;
+    backend.protocol = backend.protocol === "https:" ? "wss:" : "ws:";
+    return backend.toString().replace(/\/+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+/** The live stream address of one run, or null for a bad run id or speed. */
+export function streamUrl(base: string, runId: unknown, token: string, speed: unknown): string | null {
+  if (typeof runId !== "number" || !Number.isInteger(runId) || runId <= 0) return null;
+  if (typeof speed !== "number" || !(STREAM_SPEEDS as readonly number[]).includes(speed)) return null;
+  const query = new URLSearchParams({ token, speed: String(speed) });
+  return `${base}/api/v1/ws/simulations/${runId}?${query.toString()}`;
 }
 
 /** Response headers worth passing back to the browser. */

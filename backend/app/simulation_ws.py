@@ -1,4 +1,4 @@
-"""WebSocket /ws/simulations/{run_id}?token=<access token>&speed=<x>
+"""WebSocket /ws/simulations/{run_id}?token=<token>&speed=<x>
 
 Streams a saved simulation run tick by tick (PROJECT.md API contract):
   {t, total, evacuated, positions: [{id, x, y, floor_id, mobility, status}],
@@ -6,9 +6,11 @@ Streams a saved simulation run tick by tick (PROJECT.md API contract):
 Accepts {"action": "pause"} and {"action": "resume"}; replies with
 {"status": "paused" | "running", "t": ...}.
 
-- Authenticated with an access token in the query string (browsers cannot
-  set headers on WebSockets) and organization-checked: another
-  organization's run is reported exactly like a missing one.
+- Authenticated with a token in the query string (browsers cannot set
+  headers on WebSockets): preferably a stream token from
+  POST /simulations/{run_id}/stream-token (60 seconds, this run only), or an
+  access token. Organization-checked: another organization's run is reported
+  exactly like a missing one.
 - `speed` = simulated seconds per real second (default 10).
 - Hazards added with POST /simulations/{run_id}/hazards while streaming are
   picked up within about a second and take effect from the current tick.
@@ -24,7 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api_common import get_active
-from app.auth import user_from_access_token
+from app.auth import user_for_stream
 from app.db_session import get_db
 from app.errors import error_body, error_code_for_status
 from app.models.simulation import SimulationRun
@@ -46,7 +48,7 @@ async def stream_simulation(
     await websocket.accept()
 
     def load():
-        user = user_from_access_token(db, token)
+        user = user_for_stream(db, token, run_id)
         run = get_active(db, SimulationRun, run_id, user.organization_id, "Simulation run")
         return user, run
 

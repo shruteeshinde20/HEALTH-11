@@ -224,7 +224,54 @@ def user_from_access_token(db: Session, token: str | None) -> User:
     """Validate an access token and return its active user (HTTP and WebSocket)."""
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
-    claims = _decode_token(token, "access")
+    return _active_user(db, _decode_token(token, "access"))
+
+
+def issue_stream_token(user: User, run_id: int) -> tuple[str, int]:
+    """A short-lived token that only opens the live stream of one simulation run.
+
+    The website hands it to the browser for the WebSocket URL (browsers cannot
+    send headers there), so the access token itself never reaches JavaScript
+    or server logs. It cannot be used as a Bearer token for the REST API.
+    """
+    lifetime = get_settings().stream_token_expire_seconds
+    now = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {
+            "sub": str(user.id),
+            "org_id": user.organization_id,
+            "type": "stream",
+            "run_id": run_id,
+            "jti": str(uuid.uuid4()),
+            "iat": now,
+            "exp": now + timedelta(seconds=lifetime),
+        },
+        get_settings().jwt_secret_key,
+        algorithm=get_settings().jwt_algorithm,
+    )
+    return token, lifetime
+
+
+def user_for_stream(db: Session, token: str | None, run_id: int) -> User:
+    """WebSocket authentication: a stream token for this run, or an access token."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    settings = get_settings()
+    try:
+        token_type = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        ).get("type")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from None
+    if token_type != "stream":
+        return user_from_access_token(db, token)
+    claims = _decode_token(token, "stream")
+    if claims.get("run_id") != run_id:
+        raise HTTPException(status_code=401, detail="This token is for another simulation run")
+    return _active_user(db, claims)
+
+
+def _active_user(db: Session, claims: dict) -> User:
     try:
         user_id = int(claims["sub"])
         organization_id = int(claims["org_id"])

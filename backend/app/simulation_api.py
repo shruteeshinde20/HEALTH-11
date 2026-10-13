@@ -3,12 +3,14 @@
 - POST /simulate {scenario_id, algorithm, building_id?} -> {run_id}
 - GET  /simulation_runs, GET /simulation_runs/{id}
 - POST /simulations/{run_id}/hazards  (dynamic re-routing)
+- POST /simulations/{run_id}/stream-token -> {token, expires_in}  (opens the WebSocket)
 - POST /compare {scenario_id, building_id?} -> [{algorithm, evacuation_time_s, distance_m, risk}]
 - GET  /dashboard -> {hospitals, scenarios, last_evacuation_time_s, bottlenecks}
 - WS   /ws/simulations/{run_id}?token=...  (see simulation_ws.py)
 
 Starting simulations, comparisons and adding hazards: Administrator or
-Emergency Commander. Viewing runs and the dashboard: any signed-in user.
+Emergency Commander. Viewing runs, watching them live and the dashboard:
+any signed-in user.
 """
 
 from datetime import datetime
@@ -30,6 +32,7 @@ from app.api_common import (
     require_reference,
 )
 from app.audit import record_audit
+from app.auth import issue_stream_token
 from app.db_session import get_db
 from app.models.facility import Building, Hospital
 from app.models.operations import HazardType, Scenario
@@ -165,7 +168,30 @@ def get_run(run_id: int, db: Db, user: Reader):
         "bottlenecks": results.get("bottlenecks", []),
         "static_analysis": results.get("static_analysis", {}),
         "recommendations": results.get("recommendations", []),
+        "map": run_map(run.params.get("snapshot") or {}),
     }
+
+
+def run_map(snapshot: dict) -> dict:
+    """The building as it was when the run started, for drawing the live view.
+
+    Places and paths only; no people (their positions come from the stream).
+    """
+    return {
+        "building_id": snapshot.get("building_id"),
+        "nodes": [{key: node.get(key) for key in ("id", "name", "type", "x", "y", "floor_id", "is_blocked")}
+                  for node in snapshot.get("nodes", [])],
+        "edges": [{key: edge.get(key) for key in ("id", "from_node_id", "to_node_id", "is_blocked")}
+                  for edge in snapshot.get("edges", [])],
+    }
+
+
+@router.post("/simulations/{run_id}/stream-token")
+def stream_token(run_id: int, db: Db, user: Reader):
+    """A 60-second token that opens /ws/simulations/{run_id} and nothing else."""
+    get_active(db, SimulationRun, run_id, user.organization_id, "Simulation run")
+    token, lifetime = issue_stream_token(user, run_id)
+    return {"token": token, "expires_in": lifetime}
 
 
 @router.post("/simulations/{run_id}/hazards", status_code=status.HTTP_201_CREATED)

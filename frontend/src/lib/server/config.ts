@@ -1,8 +1,11 @@
 // Server-only settings, read from environment variables at request time
 // (never NEXT_PUBLIC_*, so nothing here reaches the browser).
 
+import { publicWsBase } from "./request-core.ts";
+
 export type ServerConfig = {
   backendUrl: string;
+  publicWsUrl: string;     // where browsers open live simulation streams
   trustProxyHeaders: boolean;
   secureCookies: boolean;
 };
@@ -21,8 +24,13 @@ export function serverConfig(): ServerConfig {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("BACKEND_URL must start with http:// or https://");
   }
+  const publicWsUrl = publicWsBase(raw, process.env.BACKEND_PUBLIC_WS_URL);
+  if (!publicWsUrl) {
+    throw new Error("BACKEND_PUBLIC_WS_URL must start with ws:// or wss:// (or be left empty)");
+  }
   cached = {
     backendUrl: raw,
+    publicWsUrl,
     trustProxyHeaders: (process.env.TRUST_PROXY_HEADERS ?? "").trim().toLowerCase() === "true",
     // Browsers only send Secure cookies over HTTPS; production must use HTTPS.
     secureCookies: process.env.NODE_ENV === "production",
