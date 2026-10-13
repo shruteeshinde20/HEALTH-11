@@ -4,7 +4,8 @@ against the real API. If the website and the API drift apart, this fails.
 Covers the Facility Manager and the onboarding wizard (Phase 10, group 1) and
 the Graph Builder and Scenario Builder (group 2), and Live Simulation and
 Algorithm Comparison (group 3), and Patients & Staff, AI Assistant and Reports &
-History (group 4), and Admin and Settings / Profile (group 5).
+History (group 4), and Admin and Settings / Profile (group 5), and the
+patients and staff CSV import and export.
 """
 
 import pytest
@@ -440,6 +441,28 @@ def test_patients_and_staff_requests(client):
     assert call(client, h, "DELETE", f"/patients/{loose['id']}", 204).content == b""
     assert call(client, h, "DELETE", f"/staff/{staff[0]['id']}", 204).content == b""
     assert ground["id"]
+
+
+def test_people_csv_requests(client):
+    h = admin(client)
+    _building, _ground, places, _scenario = _site_with_people(client, h)   # 3 staff in Ward A
+    # PeopleExportLink: a plain GET download.
+    exported = call(client, h, "GET", "/staff/export", 200)
+    assert exported.headers["content-disposition"] == 'attachment; filename="staff.csv"'
+    # PeopleImport: "Check file" (apply=false), then "Apply changes" (apply=true), same file, text/csv.
+    text = exported.text.replace("S2,Nurse 2,nurse", "S2,Nurse Two,nurse") + "S9,Porter,porter,true,,,,\r\n"
+    upload = {"headers": {**h, "Content-Type": "text/csv"}, "content": text.encode()}
+    checked = call(client, h, "POST", "/staff/import?apply=false", 200, **upload).json()
+    assert checked == {"applied": False, "rows": 4, "added": 1, "updated": 1, "removed": 0, "unchanged": 2}
+    saved = call(client, h, "POST", "/staff/import?apply=true", 200, **upload).json()
+    assert saved["applied"] is True
+    # Row problems arrive as details the dialog lists ("row 2, mobility: ...").
+    bad = call(client, h, "POST", "/patients/import?apply=false", 422,
+               headers={**h, "Content-Type": "text/csv"},
+               content=b"patient_code,mobility,criticality,test_data,hospital,building,floor_number,place\r\n"
+                       b"P1,flying,3,false,,,,\r\n").json()["error"]
+    assert bad["details"][0]["field"] == "row 2, mobility"
+    assert places["ward"]["id"]
 
 
 def test_ai_assistant_requests(client):

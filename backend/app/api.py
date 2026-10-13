@@ -10,6 +10,7 @@ from app.floor_io import router as floor_io_router
 from app.graph_api import router as graph_router
 from app.parameter_api import router as parameter_router
 from app.people_api import router as people_router
+from app.people_io import router as people_io_router
 from app.reports_api import router as reports_router
 from app.scenario_api import router as scenario_router
 from app.simulation_api import router as simulation_router
@@ -21,6 +22,8 @@ router.include_router(auth_router)
 router.include_router(facility_router)
 router.include_router(graph_router)
 router.include_router(floor_io_router)
+# Before people_router: /patients/export must not be read as /patients/{patient_id}.
+router.include_router(people_io_router)
 router.include_router(people_router)
 router.include_router(scenario_router)
 router.include_router(analysis_router)

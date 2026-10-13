@@ -141,6 +141,7 @@ PostgreSQL 16, migrations up → down → up, a model/migration drift check
 | Settings | `/parameters` (name, value, unit, source) |
 | Admin | `/users`, `GET /audit_log?action=&entity_type=&entity_id=&actor_user_id=` |
 | Floor files | `POST /floors/{id}/import` (CSV, JSON, GeoJSON; max 5 MiB), `GET /floors/{id}/export?format=json\|geojson\|csv` |
+| People files | `GET /patients/export`, `GET /staff/export` (CSV); `POST /patients/import?apply=false\|true`, `POST /staff/import?apply=false\|true` (CSV, max 1 MiB, 5,000 rows). The file is the full list: matched by code, new codes added, changed rows updated, codes not in the file removed. `apply=false` only reports what would change. |
 
 Every resource supports `GET` list, `GET /{id}`, `POST`, `PATCH /{id}` and
 `DELETE /{id}`. Deleting is a soft delete (the row is hidden and kept for

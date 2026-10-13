@@ -11,6 +11,7 @@ import { Suspense, useState, type FormEvent } from "react";
 
 import { Dialog } from "@/components/dialog.tsx";
 import { Buttons, DeleteConfirm, Field, FormError } from "@/components/facility-forms.tsx";
+import { PeopleExportLink, PeopleImport } from "@/components/people-csv.tsx";
 import { PlacePicker } from "@/components/place-picker.tsx";
 import { Card, DataTable, EmptyState, ErrorState, LoadingState, PageHeader, Tag } from "@/components/ui.tsx";
 import { apiRequest } from "@/lib/client/api.ts";
@@ -103,7 +104,7 @@ const whereText = (facility: Facility, nodeId: number | null) =>
 
 // --- Patients ----------------------------------------------------------------------------
 
-type Open<T> = { kind: "add" } | { kind: "edit"; item: T } | { kind: "delete"; item: T } | null;
+type Open<T> = { kind: "add" } | { kind: "import" } | { kind: "edit"; item: T } | { kind: "delete"; item: T } | null;
 
 function PatientList({ facility, canEdit }: { facility: Facility; canEdit: boolean }) {
   const patients = useAll<Patient>("/patients");
@@ -126,7 +127,11 @@ function PatientList({ facility, canEdit }: { facility: Facility; canEdit: boole
           <h2 className="m-0">Patients ({patients.data.length})</h2>
           <p className="sm my-1">{counts.placed} placed · {counts.unplaced} not placed</p>
         </div>
-        {canEdit && <button type="button" className="btn" onClick={() => setOpen({ kind: "add" })}>Add patients</button>}
+        <span className="flex flex-wrap gap-2">
+          <PeopleExportLink kind="patients" />
+          {canEdit && <button type="button" className="btn l" onClick={() => setOpen({ kind: "import" })}>Import CSV</button>}
+          {canEdit && <button type="button" className="btn" onClick={() => setOpen({ kind: "add" })}>Add patients</button>}
+        </span>
       </div>
       {filter.controls("patients", "Search by code")}
       {patients.data.length === 0 ? <EmptyState>No patients yet.</EmptyState>
@@ -148,6 +153,9 @@ function PatientList({ facility, canEdit }: { facility: Facility; canEdit: boole
               ],
             }))} />
         )}
+      <Dialog open={open?.kind === "import"} title="Import patients from CSV" onClose={close}>
+        {open?.kind === "import" && <PeopleImport kind="patients" onApplied={patients.reload} onClose={close} />}
+      </Dialog>
       <Dialog open={open?.kind === "add"} title="Add patients" onClose={close}>
         {open?.kind === "add" && <PatientForm facility={facility} onSaved={saved} onCancel={close} />}
       </Dialog>
@@ -260,7 +268,11 @@ function StaffList({ facility, canEdit }: { facility: Facility; canEdit: boolean
           <h2 className="m-0">Staff ({staff.data.length})</h2>
           <p className="sm my-1">{counts.placed} placed · {counts.unplaced} not placed. Staff walk at walking speed in simulations.</p>
         </div>
-        {canEdit && <button type="button" className="btn" onClick={() => setOpen({ kind: "add" })}>Add staff</button>}
+        <span className="flex flex-wrap gap-2">
+          <PeopleExportLink kind="staff" />
+          {canEdit && <button type="button" className="btn l" onClick={() => setOpen({ kind: "import" })}>Import CSV</button>}
+          {canEdit && <button type="button" className="btn" onClick={() => setOpen({ kind: "add" })}>Add staff</button>}
+        </span>
       </div>
       {filter.controls("staff", "Search by name, code or role")}
       {staff.data.length === 0 ? <EmptyState>No staff yet.</EmptyState>
@@ -282,6 +294,9 @@ function StaffList({ facility, canEdit }: { facility: Facility; canEdit: boolean
               ],
             }))} />
         )}
+      <Dialog open={open?.kind === "import"} title="Import staff from CSV" onClose={close}>
+        {open?.kind === "import" && <PeopleImport kind="staff" onApplied={staff.reload} onClose={close} />}
+      </Dialog>
       <Dialog open={open?.kind === "add"} title="Add staff" onClose={close}>
         {open?.kind === "add" && <StaffForm facility={facility} onSaved={saved} onCancel={close} />}
       </Dialog>

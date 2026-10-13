@@ -106,6 +106,11 @@ export type FloorGraph = { floor_id: number; nodes: GraphNode[]; edges: GraphEdg
 
 export type FloorImportResult = { floor_id: number; nodes_imported: number; edges_imported: number };
 
+/** POST /patients/import and /staff/import: what the file changes (applied=false: only checked). */
+export type PeopleImportResult = {
+  applied: boolean; rows: number; added: number; updated: number; removed: number; unchanged: number;
+};
+
 export type HazardType = "fire" | "smoke" | "hazmat" | "structural";
 
 export type Hazard = {

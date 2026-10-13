@@ -1,6 +1,7 @@
 // Patients & Staff rules (backend/app/people_api.py). Limits mirror the
 // backend, which validates again.
 
+import type { PeopleImportResult } from "./api-types.ts";
 import type { Mobility } from "./live.ts";
 
 export const MOBILITIES: readonly Mobility[] = ["ambulatory", "wheelchair", "stretcher", "ventilator"];
@@ -49,3 +50,33 @@ export function placementCounts(items: { node_id: number | null }[]): { placed: 
   const placed = items.filter((item) => item.node_id !== null).length;
   return { placed, unplaced: items.length - placed };
 }
+
+// --- CSV files (backend/app/people_io.py) ------------------------------------------------
+
+export type PeopleKind = "patients" | "staff";
+
+const LOCATION_COLUMNS = ["hospital", "building", "floor_number", "place"];
+
+/** Columns of the patients and staff CSV files, as written by Export. */
+export const PEOPLE_CSV_COLUMNS: Record<PeopleKind, readonly string[]> = {
+  patients: ["patient_code", "mobility", "criticality", "test_data", ...LOCATION_COLUMNS],
+  staff: ["staff_code", "full_name", "role", "test_data", ...LOCATION_COLUMNS],
+};
+
+/** Largest people file the backend accepts. */
+export const MAX_PEOPLE_FILE_BYTES = 1024 * 1024;
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+/** "2 to add, 1 to change, 1 to remove, 30 unchanged" (checked) or "Added 2, …" (saved). */
+export function importSummary(result: PeopleImportResult): string {
+  if (result.applied) {
+    return `Saved: ${result.added} added, ${result.updated} changed, ${result.removed} removed, `
+      + `${result.unchanged} unchanged.`;
+  }
+  return `The file lists ${plural(result.rows, "person", "people")}: ${result.added} to add, `
+    + `${result.updated} to change, ${result.removed} to remove, ${result.unchanged} unchanged.`;
+}
+
+export const importChangesSomething = (result: PeopleImportResult) =>
+  result.added + result.updated + result.removed > 0;

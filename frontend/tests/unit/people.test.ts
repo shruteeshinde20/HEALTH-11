@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { MOBILITIES, batchCodes, placeLabel, placementCounts } from "../../src/lib/shared/people.ts";
+import {
+  MOBILITIES, PEOPLE_CSV_COLUMNS, batchCodes, importChangesSomething, importSummary, placeLabel, placementCounts,
+} from "../../src/lib/shared/people.ts";
 
 test("the four mobility types of the API", () => {
   assert.deepEqual([...MOBILITIES], ["ambulatory", "wheelchair", "stretcher", "ventilator"]);
@@ -29,4 +31,21 @@ test("places are described with floor and building", () => {
 test("placed and not placed are counted", () => {
   assert.deepEqual(placementCounts([{ node_id: 1 }, { node_id: null }, { node_id: 3 }]), { placed: 2, unplaced: 1 });
   assert.deepEqual(placementCounts([]), { placed: 0, unplaced: 0 });
+});
+
+test("the CSV columns match the backend (backend/app/people_io.py)", () => {
+  assert.deepEqual([...PEOPLE_CSV_COLUMNS.patients],
+    ["patient_code", "mobility", "criticality", "test_data", "hospital", "building", "floor_number", "place"]);
+  assert.deepEqual([...PEOPLE_CSV_COLUMNS.staff],
+    ["staff_code", "full_name", "role", "test_data", "hospital", "building", "floor_number", "place"]);
+});
+
+test("an import is described before and after saving", () => {
+  const checked = { applied: false, rows: 33, added: 2, updated: 1, removed: 1, unchanged: 30 };
+  assert.equal(importSummary(checked),
+    "The file lists 33 people: 2 to add, 1 to change, 1 to remove, 30 unchanged.");
+  assert.equal(importSummary({ ...checked, rows: 1 }).startsWith("The file lists 1 person:"), true);
+  assert.equal(importSummary({ ...checked, applied: true }), "Saved: 2 added, 1 changed, 1 removed, 30 unchanged.");
+  assert.equal(importChangesSomething(checked), true);
+  assert.equal(importChangesSomething({ ...checked, added: 0, updated: 0, removed: 0 }), false);
 });
