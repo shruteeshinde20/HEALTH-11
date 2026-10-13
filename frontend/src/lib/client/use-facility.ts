@@ -16,6 +16,7 @@ export type Facility = {
   placesOf: (floorId: number) => PlaceRef[];
   places: Map<number, PlaceRef>;
   buildingLabel: (buildingId: number) => string;
+  floorName: (floorId: number) => string;
 };
 
 export function useFacility(): { facility: Facility | null; error: unknown; reload: () => void } {
@@ -53,6 +54,7 @@ export function useFacility(): { facility: Facility | null; error: unknown; relo
         [...places.values()].filter((p) => p.floor_id === floorId).sort((a, b) => a.name.localeCompare(b.name)),
       places,
       buildingLabel,
+      floorName: (floorId) => floorById.get(floorId)?.name ?? `Floor ${floorId}`,
     };
   }, [hospitalList, buildingList, floorList, nodeList]);
 

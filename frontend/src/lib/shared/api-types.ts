@@ -1,7 +1,7 @@
 // Response shapes of the HEALTH-11 API (backend/app/*_api.py), only the
 // fields the website reads.
 
-import type { RunMap } from "./live.ts";
+import type { Mobility, RunMap } from "./live.ts";
 
 export type Role = "Administrator" | "Emergency Commander" | "Staff User";
 
@@ -155,4 +155,97 @@ export type Comparison = {
   total: number;
   needs_assistance: number;
   reached_by_hazard: number;
+};
+
+export type Patient = {
+  id: number;
+  patient_code: string;
+  mobility: Mobility;
+  criticality: number;
+  node_id: number | null;
+  is_synthetic: boolean;
+};
+
+export type StaffMember = {
+  id: number;
+  staff_code: string;
+  full_name: string;
+  role: string;
+  node_id: number | null;
+  is_synthetic: boolean;
+};
+
+export type ParameterUsed = { name: string; value: number; unit: string | null; source: string | null; meaning: string | null };
+
+/** GET /patient_priority (backend/app/services/priority.py). */
+export type PriorityRow = {
+  rank: number;
+  patient_id: number;
+  patient_code: string;
+  mobility: string;
+  criticality: number;
+  node_id: number | null;
+  node_name: string | null;
+  is_synthetic: boolean;
+  score: number;
+  breakdown: {
+    mobility: { value: string; factor: number; weight: number; points: number };
+    criticality: { value: number; factor: number; weight: number; points: number };
+    hazard: { distance_m: number | null; factor: number; weight: number; points: number; explanation: string };
+  };
+};
+
+export type PriorityResult = Page<PriorityRow> & {
+  scenario_id: number | null;
+  building_id: number | null;
+  method: string;
+  parameters_used: ParameterUsed[];
+};
+
+/** POST /predict (backend/app/ai_api.py). */
+export type Prediction = {
+  predicted_time_s: number | null;
+  method: string;
+  mae: number | null;
+  r2: number | null;
+  note: string;
+  about: {
+    model_id: number;
+    trained_at: string | null;
+    training_runs: number;
+    test_runs: number;
+    baseline_mae_s: number;
+    model: string;
+    features: string[];
+  } | null;
+};
+
+export type DraftHazard = {
+  name: string;
+  type: HazardType;
+  origin_node_id: number;
+  origin_node_name: string;
+  severity: number;
+  spread_rate: number;
+};
+
+/** POST /assistant (backend/app/assistant_api.py). */
+export type AssistantDraft = {
+  floor_id: number;
+  method: string;
+  data_notice: string | null;
+  note: string | null;
+} & (
+  | { scenario: { name: string; description: string | null; hazards: DraftHazard[] }; clarification?: undefined }
+  | { clarification: string; unknown_names: string[]; scenario?: undefined }
+);
+
+/** POST /assistant/summary. */
+export type AssistantSummary = {
+  run_id: number;
+  summary: string;
+  source: "ai" | "standard";
+  note: string;
+  method: string;
+  data_notice: string | null;
 };

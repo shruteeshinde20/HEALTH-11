@@ -12,9 +12,9 @@ export const APP_PAGES: AppPage[] = [
   { href: "/scenarios", label: "Scenario Builder", ready: true },
   { href: "/live", label: "Live Simulation", ready: true },
   { href: "/compare", label: "Algorithm Comparison", ready: true, roles: ["Administrator", "Emergency Commander"] },
-  { href: "/people", label: "Patients & Staff", ready: false },
-  { href: "/assistant", label: "AI Assistant", ready: false },
-  { href: "/reports", label: "Reports & History", ready: false },
+  { href: "/people", label: "Patients & Staff", ready: true },
+  { href: "/assistant", label: "AI Assistant", ready: true },
+  { href: "/reports", label: "Reports & History", ready: true },
   { href: "/admin", label: "Admin", ready: false, roles: ["Administrator"] },
   { href: "/settings", label: "Settings / Profile", ready: false },
 ];

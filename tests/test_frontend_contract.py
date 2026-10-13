@@ -3,7 +3,8 @@ against the real API. If the website and the API drift apart, this fails.
 
 Covers the Facility Manager and the onboarding wizard (Phase 10, group 1) and
 the Graph Builder and Scenario Builder (group 2), and Live Simulation and
-Algorithm Comparison (group 3).
+Algorithm Comparison (group 3), and Patients & Staff, AI Assistant and Reports &
+History (group 4).
 """
 
 import pytest
@@ -377,3 +378,129 @@ def test_algorithm_comparison_requests(client):
     run_id = call(client, h, "POST", "/simulate", 201, json={
         "scenario_id": scenario["id"], "algorithm": "bfs", "building_id": building["id"]}).json()["run_id"]
     assert call(client, h, "GET", f"/simulation_runs/{run_id}", 200).json()["algorithm"] == "bfs"
+
+
+def test_patients_and_staff_requests(client):
+    h = admin(client)
+    building, ground, places, _scenario = _site_with_people(client, h)   # 3 staff in Ward A
+    # PatientForm, "How many" = 2: codes N-1, N-2, one POST each; "Not placed" sends node_id null.
+    for code in ("N-1", "N-2"):
+        call(client, h, "POST", "/patients", 201, json={"patient_code": code, "mobility": "stretcher",
+                                                        "criticality": 4, "node_id": places["ward"]["id"],
+                                                        "is_synthetic": True})
+    loose = call(client, h, "POST", "/patients", 201, json={"patient_code": "P9", "mobility": "ventilator",
+                                                            "criticality": 5, "node_id": None,
+                                                            "is_synthetic": False}).json()
+    # A reused code is refused with a readable message (shown as "1 of 2 were added; then: ...").
+    again = call(client, h, "POST", "/patients", 409, json={"patient_code": "N-1", "mobility": "ambulatory",
+                                                            "criticality": 3, "node_id": None,
+                                                            "is_synthetic": False}).json()
+    assert again["error"]["message"] == "A patient with this code already exists"
+    # Edit: every field, placing and un-placing.
+    edited = call(client, h, "PATCH", f"/patients/{loose['id']}", 200, json={
+        "patient_code": "P9", "mobility": "wheelchair", "criticality": 2,
+        "node_id": places["corridor"]["id"], "is_synthetic": False}).json()
+    assert (edited["mobility"], edited["node_id"]) == ("wheelchair", places["corridor"]["id"])
+    unplaced = call(client, h, "PATCH", f"/patients/{loose['id']}", 200, json={
+        "patient_code": "P9", "mobility": "wheelchair", "criticality": 2, "node_id": None, "is_synthetic": False}).json()
+    assert unplaced["node_id"] is None
+
+    # The lists (apiAll) with every field the tables show.
+    patients = call(client, h, "GET", "/patients", 200, params={"limit": 200, "offset": 0}).json()["items"]
+    assert {"id", "patient_code", "mobility", "criticality", "node_id", "is_synthetic"} <= set(patients[0])
+    staff = call(client, h, "GET", "/staff", 200, params={"limit": 200, "offset": 0}).json()["items"]
+    assert {"id", "staff_code", "full_name", "role", "node_id", "is_synthetic"} <= set(staff[0])
+    member = call(client, h, "PATCH", f"/staff/{staff[0]['id']}", 200, json={
+        "staff_code": staff[0]["staff_code"], "full_name": "Asha Rao", "role": "doctor",
+        "node_id": None, "is_synthetic": True}).json()
+    assert member["node_id"] is None and member["is_synthetic"] is True
+
+    # Evacuation priority: without a scenario, and with one (building chosen on the page).
+    fire = call(client, h, "POST", "/scenarios", 201, json={"name": "Ward fire", "hazards": [{
+        "name": "Fire at Ward A", "type": "fire", "origin_node_id": places["ward"]["id"],
+        "severity": 4, "spread_rate": 0}]}).json()
+    plain = call(client, h, "GET", "/patient_priority", 200, params={"limit": 200}).json()
+    assert plain["total"] == 3 and plain["scenario_id"] is None
+    ranked = call(client, h, "GET", "/patient_priority", 200, params={
+        "limit": 200, "scenario_id": fire["id"], "building_id": building["id"]}).json()
+    assert ranked["total"] == 2                       # P9 is not placed, so not in this building
+    row = ranked["items"][0]
+    assert {"rank", "patient_id", "patient_code", "node_id", "is_synthetic", "score", "breakdown"} <= set(row)
+    for part in ("mobility", "criticality", "hazard"):
+        assert {"factor", "weight", "points"} <= set(row["breakdown"][part])
+    assert row["breakdown"]["hazard"]["explanation"] == "0 m from the nearest hazard origin"
+    assert {"name", "value", "unit", "source", "meaning"} <= set(ranked["parameters_used"][0])
+    assert ranked["method"]
+
+    # Delete from the lists.
+    assert call(client, h, "DELETE", f"/patients/{loose['id']}", 204).content == b""
+    assert call(client, h, "DELETE", f"/staff/{staff[0]['id']}", 204).content == b""
+    assert ground["id"]
+
+
+def test_ai_assistant_requests(client):
+    from app.assistant_api import get_language_model
+
+    class StandIn:
+        def __init__(self, *replies):
+            self.replies = list(replies)
+
+        def complete_json(self, system, user_content, schema, max_tokens):
+            return self.replies.pop(0)
+
+    h = admin(client)
+    building, ground, places, _scenario = _site_with_people(client, h)
+    stand_in = StandIn(
+        {"status": "clarification", "clarification_question": "Which corridor?", "unknown_names": ["C9"],
+         "scenario_name": "", "scenario_description": "", "hazards": []},
+        {"status": "scenario", "clarification_question": "", "unknown_names": [],
+         "scenario_name": "Corridor fire", "scenario_description": "Reported by phone",
+         "hazards": [{"node_name": "c1", "type": "Fire", "severity": 4, "spread_rate_m_per_min": 2}]},
+        {"summary": "Everyone got out."},
+    )
+    app.dependency_overrides[get_language_model] = lambda: stand_in
+    # A question back: DraftResult shows clarification and unknown_names.
+    asked = call(client, h, "POST", "/assistant", 200, json={"text": "fire in C9", "floor_id": ground["id"]}).json()
+    assert asked["clarification"] == "Which corridor?" and asked["unknown_names"] == ["C9"]
+    assert "scenario" not in asked and asked["method"] and "data_notice" in asked
+    # A draft: every field the table and "Run it" use.
+    drafted = call(client, h, "POST", "/assistant", 200, json={"text": "fire in c1", "floor_id": ground["id"]}).json()
+    hazard = drafted["scenario"]["hazards"][0]
+    assert set(hazard) == {"name", "type", "origin_node_id", "origin_node_name", "severity", "spread_rate"}
+    assert (hazard["origin_node_name"], hazard["type"]) == ("C1", "fire")
+    assert drafted["note"] and drafted["floor_id"] == ground["id"]
+    # "Run it": the page drops origin_node_name, saves the scenario, then simulates the floor's building.
+    created = call(client, h, "POST", "/scenarios", 201, json={
+        "name": drafted["scenario"]["name"], "description": drafted["scenario"]["description"],
+        "hazards": [{k: v for k, v in hazard.items() if k != "origin_node_name"}]}).json()
+    run_id = call(client, h, "POST", "/simulate", 201, json={
+        "scenario_id": created["id"], "algorithm": "astar", "building_id": building["id"]}).json()["run_id"]
+    # Explain a run.
+    explained = call(client, h, "POST", "/assistant/summary", 200, json={"run_id": run_id}).json()
+    assert set(explained) >= {"run_id", "summary", "source", "note", "method", "data_notice"}
+    assert explained["source"] in ("ai", "standard")
+
+
+def test_reports_and_history_requests(client):
+    h = admin(client)
+    building, _ground, _places, scenario = _site_with_people(client, h)
+    other = call(client, h, "POST", "/scenarios", 201, json={"name": "Other", "hazards": []}).json()
+    for scenario_id in (scenario["id"], scenario["id"], other["id"]):
+        call(client, h, "POST", "/simulate", 201, json={
+            "scenario_id": scenario_id, "algorithm": "astar", "building_id": building["id"]})
+    # History: 20 per page, newest first, optional scenario filter.
+    page = call(client, h, "GET", "/simulation_runs", 200, params={"limit": 20, "offset": 0}).json()
+    assert page["total"] == 3 and [r["id"] for r in page["items"]] == sorted((r["id"] for r in page["items"]), reverse=True)
+    filtered = call(client, h, "GET", "/simulation_runs", 200,
+                    params={"limit": 20, "offset": 0, "scenario_id": scenario["id"]}).json()
+    assert filtered["total"] == 2
+    assert {"id", "scenario_id", "algorithm", "status", "created_at", "summary"} <= set(page["items"][0])
+    # Predictor: not enough runs yet, so no number, a note, and no "about" figures.
+    answer = call(client, h, "POST", "/predict", 200, json={
+        "scenario_id": scenario["id"], "building_id": building["id"], "algorithm": "astar"}).json()
+    assert answer["predicted_time_s"] is None and answer["note"].startswith("Not enough data")
+    assert set(answer) >= {"method", "mae", "r2", "about"} and answer["about"] is None
+    # Alerts: fewer than 50 runs gives the "more data needed" message.
+    alerts = call(client, h, "GET", "/alerts", 200).json()
+    assert alerts["message"].startswith("More data needed") and alerts["runs_considered"] == 3
+    assert alerts["method"]

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { ALERT_TAGS, RunStatus } from "@/components/run-status.tsx";
 import { Card, DataTable, EmptyState, ErrorState, LoadingState, PageHeader, Stat, Tag } from "@/components/ui.tsx";
 import { useUser } from "@/lib/client/session.tsx";
 import { useApi } from "@/lib/client/use-api.ts";
@@ -11,22 +12,11 @@ import { APP_PAGES } from "@/lib/shared/pages.ts";
 
 const RECENT_RUNS = 5;
 const scenarioBuilder = APP_PAGES.find((page) => page.href === "/scenarios");
+const reportsPage = APP_PAGES.find((page) => page.href === "/reports");
 
 function plural(count: number, one: string, many: string) {
   return count === 1 ? one : many;
 }
-
-function RunStatus({ run }: { run: RunSummary }) {
-  if (run.status !== "completed" || !run.summary) return <Tag tone="p">{run.status}</Tag>;
-  if (run.summary.total === 0) return <Tag tone="p">Nobody placed</Tag>;
-  return run.summary.all_evacuated ? <Tag tone="ok">Done</Tag> : <Tag tone="b">Not everyone out</Tag>;
-}
-
-const ALERT_TAGS = {
-  anomaly: { tone: "p", label: "Unusual run" },
-  safety: { tone: "b", label: "Safety" },
-  bottleneck: { tone: "w", label: "Bottleneck" },
-} as const;
 
 export default function DashboardPage() {
   const user = useUser();
@@ -96,11 +86,10 @@ export default function DashboardPage() {
                 }))}
               />
             ))}
-          {scenarioBuilder?.ready && (
-            <p>
-              <Link className="btn" href={scenarioBuilder.href}>Run new simulation</Link>
-            </p>
-          )}
+          <p className="flex flex-wrap gap-2">
+            {scenarioBuilder?.ready && <Link className="btn" href={scenarioBuilder.href}>Run new simulation</Link>}
+            {reportsPage?.ready && <Link className="btn l" href={reportsPage.href}>All runs and reports</Link>}
+          </p>
         </Card>
 
         <Card>
