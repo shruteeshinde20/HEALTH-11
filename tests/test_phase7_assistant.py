@@ -403,7 +403,9 @@ def test_adapter_sends_a_documented_structured_output_request(monkeypatch):
     (lambda m: m.RateLimitError(429), 503, "busy"),
     (lambda m: m.APITimeoutError(), 503, "did not answer in time"),
     (lambda m: m.APIConnectionError(), 503, "could not be reached"),
-    (lambda m: m.APIStatusError(500), 502, "(500)"),
+    (lambda m: m.APIStatusError(500), 503, "temporarily unavailable"),
+    (lambda m: m.APIStatusError(529), 503, "temporarily unavailable"),
+    (lambda m: m.APIStatusError(400), 502, "(400)"),
 ])
 def test_adapter_turns_sdk_errors_into_safe_messages(monkeypatch, error, status, words):
     monkeypatch.setitem(sys.modules, "anthropic", fake_sdk([], error=error))
@@ -535,7 +537,8 @@ def test_gemini_hides_the_key_even_if_the_service_repeats_it():
 
 @pytest.mark.parametrize("failure, words", [
     (google_error(429, "RESOURCE_EXHAUSTED", "Quota exceeded"), "busy"),
-    (google_error(503, "UNAVAILABLE", "Overloaded"), "(503)"),
+    (google_error(503, "UNAVAILABLE", "Overloaded"), "temporarily unavailable"),
+    (google_error(500, "INTERNAL", "Internal error"), "temporarily unavailable"),
     (httpx.ReadTimeout("slow"), "did not answer in time"),
     (httpx.ConnectError("no route"), "could not be reached"),
 ])
@@ -543,7 +546,8 @@ def test_gemini_retries_temporary_failures_then_gives_up(failure, words):
     model, requests, waits = gemini(failure)
     with pytest.raises(assistant.AssistantError) as raised:
         model.complete_json("S", "U", {}, 10)
-    assert raised.value.status_code in (502, 503) and words in str(raised.value)
+    # Every temporary failure is a 503 for our users: try again later.
+    assert raised.value.status_code == 503 and words in str(raised.value)
     assert len(requests) == 3 and waits == [1, 2]
 
 

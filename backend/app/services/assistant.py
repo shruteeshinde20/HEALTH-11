@@ -95,6 +95,12 @@ SUMMARY_SCHEMA = {
 }
 
 
+# The AI service itself is down or overloaded (529 is Anthropic's "overloaded").
+# These are temporary, so users are told to try again rather than shown a code.
+PROVIDER_UNAVAILABLE_STATUSES = frozenset({500, 502, 503, 504, 529})
+UNAVAILABLE_MESSAGE = "The AI service is temporarily unavailable; try again in a few minutes"
+
+
 class AssistantError(Exception):
     """The language model could not produce a usable answer."""
 
@@ -352,6 +358,8 @@ class AnthropicModel:
         except anthropic.APIConnectionError as exc:
             raise AssistantError("The AI service could not be reached", 503, self._detail(exc)) from exc
         except anthropic.APIStatusError as exc:
+            if exc.status_code in PROVIDER_UNAVAILABLE_STATUSES:
+                raise AssistantError(UNAVAILABLE_MESSAGE, 503, self._detail(exc)) from exc
             raise AssistantError(f"The AI service returned an error ({exc.status_code})", 502,
                                  self._detail(exc)) from exc
 
@@ -421,6 +429,8 @@ class GeminiModel:
             return AssistantError("The AI service rejected the API key; check GEMINI_API_KEY", 503, detail)
         if code == 429:
             return AssistantError("The AI service is busy; try again in a minute", 503, detail)
+        if code in PROVIDER_UNAVAILABLE_STATUSES:
+            return AssistantError(UNAVAILABLE_MESSAGE, 503, detail)
         return AssistantError(f"The AI service returned an error ({code})", 502, detail)
 
     def complete_json(self, system: str, user_content: str, schema: dict, max_tokens: int) -> dict:

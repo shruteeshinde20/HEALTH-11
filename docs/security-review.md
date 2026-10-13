@@ -19,6 +19,7 @@ quality, roles, multi-tenant isolation).
 | Database | `updated_at` was only set by the ORM, not by bulk updates. | A trigger sets it for every table. |
 | Database | Defaults existed only in Python. | The same defaults now exist in the database; hospitals default to UTC (no country-specific default). |
 | Database | The audit log item index did not start with the organization. | `ix_audit_log_org_entity (organization_id, entity_type, entity_id)`. |
+| AI assistant | When the AI service was down or overloaded (HTTP 500, 502, 503, 504, 529), users saw "The AI service returned an error (503)" as if something were broken. Found in the step 15 browser check. | After the retries, these now answer 503 "The AI service is temporarily unavailable; try again in a few minutes". Other service errors keep their code. |
 | Quality | Deprecated `pythonjsonlogger.jsonlogger` import (a warning in every test run). | `pythonjsonlogger.json`. |
 | Quality | `pwdlib` pinned but never used. | Removed from requirements.txt. |
 | Stack | Recharts is in the PROJECT.md stack but no chart existed. | Algorithm Comparison (time, distance, risk) and run timelines in Reports & History, each with the same numbers as a table. |
