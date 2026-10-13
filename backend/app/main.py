@@ -14,6 +14,7 @@ from app.db_session import engine
 from app.errors import error_body, error_code_for_status
 from app.health import router as health_router
 from app.logging_config import configure_logging
+from app.security_middleware import SecurityMiddleware
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -34,6 +35,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
+# Added last, so it runs first: size limit and headers apply to everything, CORS replies included.
+app.add_middleware(SecurityMiddleware, api_prefix=settings.api_v1_prefix)
 app.include_router(health_router)
 app.include_router(api_router, prefix=settings.api_v1_prefix)
 

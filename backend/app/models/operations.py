@@ -11,7 +11,9 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     text,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -55,9 +57,9 @@ class Patient(TenantMixin, TimestampMixin, Base):
     mobility: Mapped[PatientMobility] = mapped_column(
         Enum(PatientMobility, name="patient_mobility", values_callable=lambda enum_cls: [member.value for member in enum_cls]), nullable=False
     )
-    criticality: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    criticality: Mapped[int] = mapped_column(Integer, nullable=False, default=3, server_default="3")
     node_id: Mapped[int | None] = mapped_column(nullable=True)
-    is_synthetic: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_synthetic: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
 
 
 class Staff(TenantMixin, TimestampMixin, Base):
@@ -79,7 +81,7 @@ class Staff(TenantMixin, TimestampMixin, Base):
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[str] = mapped_column(String(100), nullable=False)
     node_id: Mapped[int | None] = mapped_column(nullable=True, index=True)
-    is_synthetic: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_synthetic: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
 
 
 class Hazard(TenantMixin, TimestampMixin, Base):
@@ -108,9 +110,9 @@ class Hazard(TenantMixin, TimestampMixin, Base):
         Enum(HazardType, name="hazard_type", values_callable=lambda enum_cls: [member.value for member in enum_cls]), nullable=False
     )
     origin_node_id: Mapped[int] = mapped_column(nullable=False)
-    spread_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    severity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    spread_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0")
+    severity: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
 
 
 class Scenario(TenantMixin, TimestampMixin, Base):
@@ -132,4 +134,4 @@ class Scenario(TenantMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     created_by_user_id: Mapped[int | None] = mapped_column(nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())

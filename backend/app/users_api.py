@@ -31,7 +31,7 @@ from app.api_common import (
     paginate,
 )
 from app.audit import record_audit
-from app.auth import _password_hash, check_password_strength, normalize_email
+from app.auth import _password_hash, check_password_strength, end_other_sessions, normalize_email
 from app.db_session import get_db
 from app.models.user import RefreshToken, User, UserRole
 from app.permissions import Admin
@@ -124,7 +124,7 @@ def _revoke_refresh_tokens(db: Session, user: User) -> None:
             RefreshToken.user_id == user.id,
             RefreshToken.revoked_at.is_(None),
         )
-        .values(revoked_at=func.now())
+        .values(revoked_at=func.now(), revoked_reason="deactivated")
     )
 
 
@@ -182,7 +182,10 @@ def update_user(user_id: int, payload: UserUpdate, db: Db, admin: Admin, request
         user.is_active = changes["is_active"]
     if "password" in changes:
         user.password_hash = _password_hash(changes["password"])
-    if deactivating or "password" in changes:
+    if "password" in changes:
+        # Signs the user out everywhere at once: old access tokens stop working too.
+        end_other_sessions(db, user)
+    elif deactivating:
         _revoke_refresh_tokens(db, user)
 
     flush_or_conflict(db, CONFLICT)

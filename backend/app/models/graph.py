@@ -13,6 +13,7 @@ from sqlalchemy import (
     false,
     func,
     text,
+    true,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -64,10 +65,10 @@ class Node(TenantMixin, TimestampMixin, Base):
     type: Mapped[NodeType] = mapped_column(
         Enum(NodeType, name="node_type", values_callable=lambda enum_cls: [member.value for member in enum_cls]), nullable=False
     )
-    x: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    y: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    x: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0")
+    y: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0")
+    capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     # A protected lift that may still be used during a fire or smoke
     # emergency. Ordinary lifts are not used in those scenarios.
     is_evacuation_lift: Mapped[bool] = mapped_column(
@@ -111,9 +112,9 @@ class Edge(TenantMixin, TimestampMixin, Base):
     width: Mapped[float] = mapped_column(Float, nullable=False)
     max_flow: Mapped[int] = mapped_column(Integer, nullable=False)
     wheelchair_accessible: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
+        Boolean, nullable=False, default=True, server_default=true()
     )
     stretcher_accessible: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
+        Boolean, nullable=False, default=True, server_default=true()
     )
-    is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())

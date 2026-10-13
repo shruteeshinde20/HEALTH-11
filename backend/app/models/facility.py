@@ -21,7 +21,7 @@ class Hospital(TenantMixin, TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     address: Mapped[str | None] = mapped_column(String(500))
-    timezone: Mapped[str] = mapped_column(String(100), default="Asia/Kolkata", nullable=False)
+    timezone: Mapped[str] = mapped_column(String(100), default="UTC", server_default="UTC", nullable=False)
 
     buildings: Mapped[list["Building"]] = relationship(
         primaryjoin="and_(Hospital.id == foreign(Building.hospital_id), "

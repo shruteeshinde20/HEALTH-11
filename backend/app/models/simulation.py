@@ -79,7 +79,7 @@ class AuditLog(TenantMixin, TimestampMixin, Base):
     __tablename__ = "audit_log"
     __table_args__ = (
         Index("ix_audit_log_org_created", "organization_id", "created_at"),
-        Index("ix_audit_log_entity", "entity_type", "entity_id"),
+        Index("ix_audit_log_org_entity", "organization_id", "entity_type", "entity_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

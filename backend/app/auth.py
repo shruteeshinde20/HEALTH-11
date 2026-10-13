@@ -288,7 +288,30 @@ def _active_user(db: Session, claims: dict) -> User:
     )
     if user is None:
         raise HTTPException(status_code=401, detail="User is unavailable")
+    if user.tokens_valid_after is not None:
+        valid_after = user.tokens_valid_after
+        if valid_after.tzinfo is None:
+            valid_after = valid_after.replace(tzinfo=timezone.utc)
+        issued = claims.get("iat")
+        # iat is in whole seconds; a token from an earlier second predates the change.
+        if not isinstance(issued, (int, float)) or issued < int(valid_after.timestamp()):
+            raise HTTPException(status_code=401, detail="This session has ended; please sign in again")
     return user
+
+
+def end_other_sessions(db: Session, user: User) -> None:
+    """Refuse every token issued so far and revoke every refresh token of the user
+    (used when the password changes). New tokens issued afterwards work."""
+    user.tokens_valid_after = datetime.now(timezone.utc)
+    db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.organization_id == user.organization_id,
+            RefreshToken.user_id == user.id,
+            RefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=func.now(), revoked_reason="sessions_ended")
+    )
 
 
 @router.post("/register-organization", status_code=201)
@@ -414,6 +437,43 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         raise
 
 
+REUSE_GRACE_SECONDS = 30
+
+
+def _handle_refresh_reuse(db: Session, request: Request, jti: str, user_id: int,
+                          organization_id: int, now: datetime) -> None:
+    """A refresh token that was already rotated or revoked is presented again.
+
+    Each refresh token works once. If an old one comes back later than a short
+    grace period (two tabs renewing at the same moment), it was probably copied:
+    every session of the user is ended, so a stolen token stops working for the
+    thief too. The user simply signs in again.
+    """
+    used = db.scalar(
+        select(RefreshToken).where(
+            RefreshToken.jti == jti,
+            RefreshToken.user_id == user_id,
+            RefreshToken.organization_id == organization_id,
+            # Only a token replaced by a newer one can be "reused"; one ended by
+            # logout or a password change is simply refused.
+            RefreshToken.revoked_reason == "rotated",
+        )
+    )
+    if used is None or used.revoked_at is None:
+        return
+    revoked_at = used.revoked_at
+    if revoked_at.tzinfo is None:
+        revoked_at = revoked_at.replace(tzinfo=timezone.utc)
+    if (now - revoked_at).total_seconds() <= REUSE_GRACE_SECONDS:
+        return
+    user = db.scalar(select(User).where(User.id == user_id, User.organization_id == organization_id))
+    if user is None:
+        return
+    end_other_sessions(db, user)
+    _audit(db, organization_id, user_id, "auth.refresh_token_reused", "user", user_id, request)
+    db.commit()
+
+
 @router.post("/refresh")
 def refresh(payload: RefreshRequest, request: Request, db: Session = Depends(get_db)):
     claims = _decode_token(payload.refresh_token, "refresh")
@@ -435,6 +495,7 @@ def refresh(payload: RefreshRequest, request: Request, db: Session = Depends(get
     )
     now = datetime.now(timezone.utc)
     if stored is None:
+        _handle_refresh_reuse(db, request, jti, user_id, organization_id, now)
         raise HTTPException(status_code=401, detail="Refresh token has been revoked or used")
     expires_at = stored.expires_at
     if expires_at.tzinfo is None:
@@ -454,6 +515,7 @@ def refresh(payload: RefreshRequest, request: Request, db: Session = Depends(get
         raise HTTPException(status_code=401, detail="User is unavailable")
 
     stored.revoked_at = now
+    stored.revoked_reason = "rotated"
     tokens = _new_token_pair(db, user)
     _audit(db, organization_id, user.id, "auth.refresh",
            "user", user.id, request)
@@ -481,9 +543,11 @@ def logout(payload: RefreshRequest, request: Request, db: Session = Depends(get_
         ).with_for_update()
     )
     if stored is None:
-        raise HTTPException(status_code=401, detail="Refresh token has already been revoked or used")
+        # Already signed out (for example a second click on Log out): nothing to do.
+        return None
 
     stored.revoked_at = datetime.now(timezone.utc)
+    stored.revoked_reason = "logout"
     _audit(db, organization_id, user_id, "auth.logout",
            "user", user_id, request)
     db.commit()
@@ -552,15 +616,7 @@ def change_password(payload: PasswordChange, request: Request, current_user: Use
         raise HTTPException(status_code=400, detail="Choose a new password that is different from the current one")
 
     current_user.password_hash = _password_hash(payload.new_password)
-    db.execute(
-        update(RefreshToken)
-        .where(
-            RefreshToken.organization_id == current_user.organization_id,
-            RefreshToken.user_id == current_user.id,
-            RefreshToken.revoked_at.is_(None),
-        )
-        .values(revoked_at=func.now())
-    )
+    end_other_sessions(db, current_user)
     tokens = _new_token_pair(db, current_user)
     # Never log the password; only that it changed.
     _audit(db, current_user.organization_id, current_user.id, "user.password_changed", "user",
