@@ -31,3 +31,7 @@ scipy==1.17.1
 # on the project's Windows / Python 3.11 environment; it brings its own HTTP
 # client (httpx2) and did not change any version pinned above.
 anthropic==1.13.0
+
+# PDF reports. Version verified by installing on the project's Windows /
+# Python 3.11 environment (it brought pillow 12.3.0 and charset-normalizer 3.5.2).
+reportlab==5.0.1

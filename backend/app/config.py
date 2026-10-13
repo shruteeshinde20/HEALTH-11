@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     assistant_max_requests_per_user: int = 20
     assistant_window_seconds: int = 600
 
+    # Reports. Optional TrueType font (.ttf) for names in other scripts; the
+    # built-in PDF font covers Western European letters only.
+    report_font_path: Path | None = None
+    report_max_requests_per_user: int = 30
+    report_window_seconds: int = 600
+
     # Rate limits (stored in PostgreSQL, so they hold across server workers).
     rate_limit_window_seconds: int = 900
     login_max_attempts_per_ip: int = 30
@@ -112,6 +118,17 @@ class Settings(BaseSettings):
         value = value.strip().lower()
         if value not in {"v1", "v1beta"}:
             raise ValueError("GEMINI_API_VERSION must be v1 or v1beta")
+        return value
+
+    @field_validator("report_font_path", mode="before")
+    @classmethod
+    def validate_report_font_path(cls, value):
+        # An empty REPORT_FONT_PATH= line means "not set".
+        if value is None or str(value).strip() == "":
+            return None
+        value = Path(str(value).strip())
+        if value.suffix.lower() != ".ttf" or not value.is_file():
+            raise ValueError("REPORT_FONT_PATH must point to an existing .ttf font file")
         return value
 
     @field_validator("environment")

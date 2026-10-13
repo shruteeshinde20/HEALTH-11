@@ -278,6 +278,34 @@ the service's own reason is shown:
 .\.venv\Scripts\python.exe scripts\check_assistant.py
 ```
 
+## Reports (PDF and CSV)
+
+`GET /api/v1/reports/{run_id}?format=pdf` (default) or `?format=csv` downloads a
+report of a saved simulation run. Every signed-in user of the organization can
+download reports (Staff Users included); each download is recorded in the audit
+log and limited to `REPORT_MAX_REQUESTS_PER_USER` (default 30) per user per
+`REPORT_WINDOW_SECONDS` (default 600).
+
+Contents, all taken from what was stored with the run: summary, hazards
+(including ones added during the run), recommendations, bottlenecks, people per
+exit, timeline, hazard spread, each person's route and outcome, the parameters
+used (with their source) and the accuracy of the evacuation-time predictor
+(or a note that none has been trained). The safety notice is on every PDF page
+and at the top of the CSV.
+
+- Place names are the ones at the time of the run; people are listed by record
+  number only, never by name.
+- The CSV is UTF-8 with a byte-order mark (opens correctly in Excel), one block
+  per section. Text that a spreadsheet would run as a formula (`=`, `+`, `-`,
+  `@`) is prefixed with `'`.
+- The built-in PDF font covers Western European letters. For place names in
+  other scripts set `REPORT_FONT_PATH` to a `.ttf` font that has them (for
+  example `C:\Windows\Fonts\arial.ttf`); scripts that need letter shaping,
+  such as Devanagari, may still not join correctly in the PDF — the CSV always
+  has the exact text.
+- Very large runs take longer as PDF (about 20 s for 5,000 people and an hour
+  of timeline); the CSV is immediate.
+
 ## Roles
 
 | Role (API value)      | Access |
