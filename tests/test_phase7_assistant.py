@@ -671,3 +671,20 @@ def test_missing_gemini_configuration_is_explained(db_session, monkeypatch):
         app.dependency_overrides.clear()
     assert response.status_code == 503
     assert "GEMINI_API_KEY" in response.json()["error"]["message"]
+
+
+# --- Tests never use the developer's real AI settings or the network ------------------------
+
+def test_tests_ignore_real_ai_settings_in_env():
+    # Regression: with AI_PROVIDER=gemini and a real key in .env, tests used them
+    # and one test sent a real request to Google.
+    current = get_settings()
+    assert current.ai_provider == "anthropic"
+    assert current.anthropic_api_key is None and current.gemini_api_key is None
+
+
+def test_tests_cannot_reach_a_real_ai_service():
+    model = assistant.GeminiModel("AIza-not-real", "gemini-test", timeout=1, max_retries=0)
+    with pytest.raises(assistant.AssistantError) as raised:
+        model.complete_json("S", "U", {}, 10)
+    assert "must not make real network requests" in raised.value.detail

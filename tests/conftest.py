@@ -56,3 +56,39 @@ def db_session(engine):
         session.close()
         outer_transaction.rollback()
         connection.close()
+
+
+# AI settings that tests start from, whatever the developer's .env says
+# (a real key or AI_PROVIDER=gemini there must never change a test or be used).
+SAFE_AI_SETTINGS = {
+    "ai_provider": "anthropic",
+    "anthropic_api_key": None,
+    "anthropic_model": None,
+    "gemini_api_key": None,
+    "gemini_model": None,
+    "gemini_free_tier": True,
+    "gemini_api_version": "v1",
+}
+
+
+@pytest.fixture(autouse=True)
+def no_real_ai_settings(monkeypatch):
+    from app.config import get_settings
+
+    for name, value in SAFE_AI_SETTINGS.items():
+        monkeypatch.setattr(get_settings(), name, value)
+        # Settings built inside a test must not pick them up from the environment either.
+        monkeypatch.delenv(name.upper(), raising=False)
+
+
+@pytest.fixture(autouse=True)
+def no_real_network(monkeypatch):
+    """Tests never reach the internet. In-process test clients and
+    httpx.MockTransport still work; a real HTTP request fails the test."""
+    import httpx
+
+    def blocked(self, request):
+        raise httpx.ConnectError(
+            f"Tests must not make real network requests (tried {request.url.host})", request=request)
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", blocked)

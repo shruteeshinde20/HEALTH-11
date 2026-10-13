@@ -1,4 +1,4 @@
-"""One real call to the Anthropic API, to check the AI assistant is set up.
+"""One real call to the configured AI service, to check the AI assistant is set up.
 
 Run from the project folder:
     .\\.venv\\Scripts\\python.exe scripts\\check_assistant.py
