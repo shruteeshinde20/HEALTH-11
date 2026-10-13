@@ -99,6 +99,9 @@ SUMMARY_SCHEMA = {
 # These are temporary, so users are told to try again rather than shown a code.
 PROVIDER_UNAVAILABLE_STATUSES = frozenset({500, 502, 503, 504, 529})
 UNAVAILABLE_MESSAGE = "The AI service is temporarily unavailable; try again in a few minutes"
+# A used-up quota (for example a free tier's daily limit) does not come back in a minute.
+QUOTA_MESSAGE = ("The usage limit (quota) of the AI service has been reached; try again later, "
+                 "use a key with a higher limit, or choose another AI_PROVIDER")
 
 
 class AssistantError(Exception):
@@ -427,6 +430,8 @@ class GeminiModel:
         detail = self._hide(" | ".join(str(p)[:500] for p in (f"HTTP {code}", status, message) if p))
         if code in (401, 403) or (code == 400 and "api key" in str(message).lower()):
             return AssistantError("The AI service rejected the API key; check GEMINI_API_KEY", 503, detail)
+        if code == 429 and "quota" in str(message).lower():
+            return AssistantError(QUOTA_MESSAGE, 503, detail)
         if code == 429:
             return AssistantError("The AI service is busy; try again in a minute", 503, detail)
         if code in PROVIDER_UNAVAILABLE_STATUSES:
@@ -491,9 +496,91 @@ class GeminiModel:
             raise AssistantError("The assistant gave an answer in an unexpected format") from exc
 
 
+# --- Ollama adapter (a model running on this computer) ------------------------------------
+
+_THINKING = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL)
+
+
+class OllamaModel:
+    """Calls a model that runs on the user's own computer with Ollama
+    (https://ollama.com) through its local HTTP API: POST {OLLAMA_URL}/api/chat
+    with stream=false and format = the JSON schema (structured outputs:
+    https://ollama.com/blog/structured-outputs), temperature 0 as recommended
+    there. Nothing is sent to an outside company and there is no usage quota.
+    Small local models make more mistakes than large hosted ones; every answer
+    still goes through the same checks (names, ranges, stored figures only)
+    and nothing runs without "Run it". scripts/check_assistant.py checks the
+    setup against the real local service.
+    """
+
+    def __init__(self, url: str, model: str, timeout: float, transport=None):
+        import httpx
+
+        self._httpx = httpx
+        self._url = url.rstrip("/") + "/api/chat"
+        # Ollama on this computer is reached directly, never through a proxy
+        # configured for internet traffic (HTTP_PROXY / HTTPS_PROXY).
+        self._direct = httpx.URL(self._url).host in {"127.0.0.1", "localhost", "::1"}
+        self._model = model
+        self._timeout = timeout
+        self._transport = transport
+
+    def complete_json(self, system: str, user_content: str, schema: dict, max_tokens: int) -> dict:
+        httpx = self._httpx
+        body = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system + "\n\nAnswer only with JSON that matches the given schema."},
+                {"role": "user", "content": user_content},
+            ],
+            "stream": False,
+            "format": schema,
+            "options": {"temperature": 0, "num_predict": max_tokens},
+        }
+        try:
+            with httpx.Client(timeout=self._timeout, transport=self._transport,
+                              trust_env=not self._direct) as client:
+                response = client.post(self._url, json=body)
+        except httpx.TimeoutException as exc:
+            raise AssistantError("The AI service did not answer in time; try again", 503,
+                                 f"{type(exc).__name__} after {self._timeout:g} s (OLLAMA_TIMEOUT_SECONDS)") from exc
+        except httpx.HTTPError as exc:
+            raise AssistantError("The local AI (Ollama) is not running; start the Ollama app", 503,
+                                 f"{type(exc).__name__}: {exc}"[:500]) from exc
+
+        if response.status_code >= 400:
+            try:
+                message = str(response.json().get("error", ""))[:500]
+            except (ValueError, AttributeError):
+                message = ""
+            detail = " | ".join(p for p in (f"HTTP {response.status_code}", message) if p)
+            if response.status_code == 404:
+                raise AssistantError(f"The Ollama model is not installed; run: ollama pull {self._model}",
+                                     503, detail)
+            raise AssistantError(f"The AI service returned an error ({response.status_code})", 502, detail)
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise AssistantError("The assistant gave an answer in an unexpected format") from exc
+        if not isinstance(data, dict):
+            raise AssistantError("The assistant gave an answer in an unexpected format")
+        if data.get("done_reason") == "length":
+            raise AssistantError("The assistant could not complete an answer; try rephrasing",
+                                 detail="done_reason length (answer longer than allowed)")
+        message = data.get("message")
+        text = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(text, str):
+            raise AssistantError("The assistant gave an answer in an unexpected format")
+        try:
+            return json.loads(_THINKING.sub("", text, count=1))
+        except ValueError as exc:
+            raise AssistantError("The assistant gave an answer in an unexpected format") from exc
+
+
 # --- Choosing the provider --------------------------------------------------------------------
 
-PROVIDERS = ("anthropic", "gemini")
+PROVIDERS = ("anthropic", "gemini", "ollama")
 FREE_TIER_NOTICE = (
     "Free Gemini API tier: Google may use what is sent to improve its products. "
     "Use made-up data only; do not type patient names or other personal details."
@@ -510,6 +597,11 @@ def data_notice(settings) -> str | None:
 def configured_model(settings) -> LanguageModel:
     """The model chosen by AI_PROVIDER in .env. Raises AssistantError (503) with
     the setting to fix when something is missing; never includes the key."""
+    if settings.ai_provider == "ollama":
+        if not settings.ollama_model:
+            raise AssistantError("The AI assistant is not configured: set OLLAMA_MODEL in .env "
+                                 "(and install it with: ollama pull <model>)", 503)
+        return OllamaModel(settings.ollama_url, settings.ollama_model, timeout=settings.ollama_timeout_seconds)
     if settings.ai_provider == "gemini":
         key = settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else ""
         if not key or not settings.gemini_model:

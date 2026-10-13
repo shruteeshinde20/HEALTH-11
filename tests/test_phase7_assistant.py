@@ -536,7 +536,7 @@ def test_gemini_hides_the_key_even_if_the_service_repeats_it():
 
 
 @pytest.mark.parametrize("failure, words", [
-    (google_error(429, "RESOURCE_EXHAUSTED", "Quota exceeded"), "busy"),
+    (google_error(429, "RESOURCE_EXHAUSTED", "Quota exceeded"), "usage limit (quota)"),
     (google_error(503, "UNAVAILABLE", "Overloaded"), "temporarily unavailable"),
     (google_error(500, "INTERNAL", "Internal error"), "temporarily unavailable"),
     (httpx.ReadTimeout("slow"), "did not answer in time"),

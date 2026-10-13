@@ -6,7 +6,8 @@ Run from the project folder:
 It reads AI_PROVIDER and that provider's key and model from .env, sends one short
 made-up request (no database, no patient data) and checks that the answer
 passes the same checks the API uses. The key is never printed.
-Each run is one API request (billed, or counted against a free-tier limit).
+Each run is one API request (billed, or counted against a free-tier limit);
+with AI_PROVIDER=ollama it runs on this computer and costs nothing.
 """
 
 import sys
@@ -25,7 +26,7 @@ TEXT = "Fire in ward a, severity 3, spreading about 2 metres per minute."
 def main() -> int:
     settings = get_settings()
     provider = settings.ai_provider
-    secret = settings.gemini_api_key if provider == "gemini" else settings.anthropic_api_key
+    secret = {"gemini": settings.gemini_api_key, "anthropic": settings.anthropic_api_key}.get(provider)
     if secret and secret.get_secret_value().startswith("replace_with"):
         print(f"FAILED: {provider.upper()}_API_KEY in .env is still the placeholder")
         return 1
@@ -34,9 +35,13 @@ def main() -> int:
     except assistant.AssistantError as exc:
         print(f"FAILED: {exc}")
         return 1
-    name = settings.gemini_model if provider == "gemini" else settings.anthropic_model
-    version = f", API version: {settings.gemini_api_version}" if provider == "gemini" else ""
-    print(f"Provider: {provider}, model: {name}{version}  (API key loaded from .env, not shown)")
+    if provider == "ollama":
+        print(f"Provider: ollama, model: {settings.ollama_model}, on {settings.ollama_url}  (runs on this "
+              f"computer; no API key; answers can take a minute, limit {settings.ollama_timeout_seconds:g} s)")
+    else:
+        name = settings.gemini_model if provider == "gemini" else settings.anthropic_model
+        version = f", API version: {settings.gemini_api_version}" if provider == "gemini" else ""
+        print(f"Provider: {provider}, model: {name}{version}  (API key loaded from .env, not shown)")
     notice = assistant.data_notice(settings)
     if notice:
         print(f"Note: {notice}")

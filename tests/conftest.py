@@ -68,6 +68,8 @@ SAFE_AI_SETTINGS = {
     "gemini_model": None,
     "gemini_free_tier": True,
     "gemini_api_version": "v1",
+    "ollama_url": "http://127.0.0.1:11434",
+    "ollama_model": None,
 }
 
 

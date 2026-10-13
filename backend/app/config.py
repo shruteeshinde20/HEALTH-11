@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -50,6 +51,11 @@ class Settings(BaseSettings):
     # True while using Google's free API tier, where Google may use what is sent
     # to improve its products. Not allowed in production.
     gemini_free_tier: bool = True
+    # Ollama: a model running on this computer (https://ollama.com). No key;
+    # local models answer more slowly, so they get their own time limit.
+    ollama_url: str = "http://127.0.0.1:11434"
+    ollama_model: str | None = None
+    ollama_timeout_seconds: float = Field(default=180.0, gt=0, le=1800)
     assistant_timeout_seconds: float = 30.0
     assistant_max_requests_per_user: int = 20
     assistant_window_seconds: int = 600
@@ -111,9 +117,22 @@ class Settings(BaseSettings):
     @classmethod
     def validate_ai_provider(cls, value: str) -> str:
         value = value.strip().lower()
-        if value not in {"anthropic", "gemini"}:
-            raise ValueError("AI_PROVIDER must be anthropic or gemini")
+        if value not in {"anthropic", "gemini", "ollama"}:
+            raise ValueError("AI_PROVIDER must be anthropic, gemini or ollama")
         return value
+
+    @field_validator("ollama_url")
+    @classmethod
+    def validate_ollama_url(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.path or parsed.query:
+            raise ValueError("OLLAMA_URL must look like http://127.0.0.1:11434")
+        return value
+
+    @property
+    def ollama_is_local(self) -> bool:
+        return urlparse(self.ollama_url).hostname in {"127.0.0.1", "localhost", "::1"}
 
     @field_validator("gemini_api_version")
     @classmethod
@@ -154,6 +173,12 @@ class Settings(BaseSettings):
             if "replace_me" in self.resolved_database_url.lower():
                 raise ValueError(
                     "Configure a valid database password and URL in production"
+                )
+            if (self.ai_provider == "ollama" and not self.ollama_is_local
+                    and urlparse(self.ollama_url).scheme != "https"):
+                raise ValueError(
+                    "OLLAMA_URL must be on this computer (127.0.0.1) or use https in production, "
+                    "so the assistant's data never travels unencrypted"
                 )
             if self.ai_provider == "gemini" and self.gemini_free_tier:
                 raise ValueError(
