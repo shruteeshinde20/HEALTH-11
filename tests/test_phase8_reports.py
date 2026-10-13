@@ -195,6 +195,19 @@ def test_hazards_added_during_the_run_are_listed(client, db_session):
     assert ["Smoke", "smoke", "Corridor 1", "1", "0.0", "added at 3 s"] in hazards
 
 
+def test_a_run_with_nobody_placed_is_not_reported_as_a_failed_evacuation(client, db_session):
+    site = Site(client, db_session, "Empty Org")
+    run_id = site.run(people=0, hazard=True)
+    assert site.stored(run_id)["summary"]["total"] == 0
+    summary = dict(csv_sections(site.report(run_id, "csv").content)["Summary"][1:])
+    assert summary["People simulated"] == "0"
+    assert summary["Everyone evacuated"] == reports.NOBODY_PLACED
+    assert summary["Evacuation time (s)"] == reports.NOBODY_PLACED
+    text = pdf_text(site.report(run_id, "pdf").content)
+    assert "not complete" not in text
+    assert "nobody to evacuate" in text
+
+
 def test_spreadsheet_formulas_in_names_are_neutralised(client, db_session):
     site = Site(client, db_session, "Formula Org", ward='=HYPERLINK("http://evil","x")')
     content = site.report(site.run(), "csv").content.decode("utf-8-sig")

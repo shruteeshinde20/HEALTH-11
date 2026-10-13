@@ -47,6 +47,9 @@ class Report:
 
 # --- Collecting the content ----------------------------------------------------------------
 
+NOBODY_PLACED = "nobody to evacuate (no people placed in this building)"
+
+
 def _seconds(value) -> str | None:
     return None if value is None else f"{value:.0f}"
 
@@ -88,6 +91,15 @@ def build_report(run, *, scenario_name: str | None, building_name: str | None,
         for e in snapshot.get("edges", [])
     }
     summary = results.get("summary") or {}
+    # With nobody placed there is nothing to evacuate: say so instead of
+    # "Everyone evacuated: no", which would read like a failed evacuation.
+    nobody = summary.get("total") == 0
+    if nobody:
+        everyone, evacuation_time = NOBODY_PLACED, NOBODY_PLACED
+    else:
+        everyone = summary.get("all_evacuated")
+        evacuation_time = (_seconds(summary.get("evacuation_time_s"))
+                           if summary.get("all_evacuated") else "not complete")
 
     facts = [
         ("Run", run.id),
@@ -100,9 +112,8 @@ def build_report(run, *, scenario_name: str | None, building_name: str | None,
         ("Need assisted evacuation", summary.get("needs_assistance")),
         ("Reached by the hazard", summary.get("reached_by_hazard")),
         ("Still moving when the simulation stopped", summary.get("still_moving")),
-        ("Everyone evacuated", summary.get("all_evacuated")),
-        ("Evacuation time (s)", _seconds(summary.get("evacuation_time_s"))
-         if summary.get("all_evacuated") else "not complete"),
+        ("Everyone evacuated", everyone),
+        ("Evacuation time (s)", evacuation_time),
         ("Mean walking distance (m)", summary.get("mean_distance_m")),
         ("Mean waiting time (s)", summary.get("mean_wait_s")),
         ("Re-routes", summary.get("reroutes")),
