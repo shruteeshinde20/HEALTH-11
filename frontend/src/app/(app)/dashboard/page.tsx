@@ -51,7 +51,7 @@ export default function DashboardPage() {
             <Stat value={dashboard.data.bottlenecks.length}
                   label={plural(dashboard.data.bottlenecks.length, "Bottleneck found", "Bottlenecks found")} />
           </div>
-          {dashboard.data.note && <p className="sm mt-2">{dashboard.data.note}</p>}
+          {dashboard.data.last_run && dashboard.data.note && <p className="sm mt-2">{dashboard.data.note}</p>}
         </>
       )}
 

@@ -48,6 +48,11 @@
   a {
     color: var(--color-ink);
   }
+  /* The design relies on the browser's default paragraph spacing, which
+     Tailwind's reset removes. */
+  p {
+    margin: 1em 0;
+  }
   label {
     display: block;
     color: var(--color-tx2);
