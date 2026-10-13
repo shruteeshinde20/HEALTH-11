@@ -18,6 +18,7 @@ function plural(count: number, one: string, many: string) {
 
 function RunStatus({ run }: { run: RunSummary }) {
   if (run.status !== "completed" || !run.summary) return <Tag tone="p">{run.status}</Tag>;
+  if (run.summary.total === 0) return <Tag tone="p">Nobody placed</Tag>;
   return run.summary.all_evacuated ? <Tag tone="ok">Done</Tag> : <Tag tone="b">Not everyone out</Tag>;
 }
 

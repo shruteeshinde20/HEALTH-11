@@ -210,20 +210,23 @@ function FirstSimulation({ floor, graph, onDone }: { floor: Floor; graph: FloorG
     const summary = result.summary;
     return (
       <div role="status">
-        <p>
-          <Tag tone={summary?.all_evacuated ? "ok" : "b"}>{summary?.all_evacuated ? "Everyone out" : "Not everyone out"}</Tag>{" "}
-          {summary ? `${summary.evacuated} of ${summary.total} people reached an exit` : "Saved."}
-          {summary?.all_evacuated ? ` in ${formatSeconds(summary.evacuation_time_s)}.` : "."}
-        </p>
-        <ul>
-          {result.recommendations.map((item, i) => <li key={i}>{item.text}</li>)}
-        </ul>
-        {summary?.total === 0 && (
-          <p className="sm">
-            Nobody is placed in this building yet, so nobody was simulated.
+        {!summary || summary.total === 0 ? (
+          <p>
+            <Tag tone="p">Nobody to evacuate</Tag> The simulation was saved, but nobody is placed in this building yet.
             {peoplePage?.ready ? <> Add people on <Link href={peoplePage.href}>Patients &amp; Staff</Link>.</>
                                : " Placing patients and staff comes with the Patients & Staff page."}
           </p>
+        ) : (
+          <>
+            <p>
+              <Tag tone={summary.all_evacuated ? "ok" : "b"}>{summary.all_evacuated ? "Everyone out" : "Not everyone out"}</Tag>{" "}
+              {summary.evacuated} of {summary.total} people reached an exit
+              {summary.all_evacuated ? ` in ${formatSeconds(summary.evacuation_time_s)}.` : "."}
+            </p>
+            <ul>
+              {result.recommendations.map((item, i) => <li key={i}>{item.text}</li>)}
+            </ul>
+          </>
         )}
         <p className="flex flex-wrap gap-2">
           <a className="btn l" href={`/api/backend/reports/${result.id}?format=pdf`} download>Report (PDF)</a>

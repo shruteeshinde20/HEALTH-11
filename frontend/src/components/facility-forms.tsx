@@ -33,10 +33,12 @@ function Field({ id, label, error, hint, children }: {
   );
 }
 
-function Buttons({ busy, label, onCancel }: { busy: boolean; label: string; onCancel?: () => void }) {
+function Buttons({ busy, disabled = false, label, onCancel }: {
+  busy: boolean; disabled?: boolean; label: string; onCancel?: () => void;
+}) {
   return (
     <p className="flex flex-wrap gap-2">
-      <button type="submit" className="btn" disabled={busy}>{busy ? "Saving…" : label}</button>
+      <button type="submit" className="btn" disabled={busy || disabled}>{busy ? "Saving…" : label}</button>
       {onCancel && <button type="button" className="btn l" onClick={onCancel}>Cancel</button>}
     </p>
   );
@@ -97,7 +99,7 @@ export function HospitalForm({ hospital, onSaved, onCancel, submitLabel }: {
         </select>
       </Field>
       <FormError error={error} />
-      <Buttons busy={busy || !name.trim()} label={submitLabel ?? (hospital ? "Save" : "Add hospital")} onCancel={onCancel} />
+      <Buttons busy={busy} disabled={!name.trim()} label={submitLabel ?? (hospital ? "Save" : "Add hospital")} onCancel={onCancel} />
     </form>
   );
 }
@@ -137,7 +139,7 @@ export function BuildingForm({ hospitalId, building, onSaved, onCancel, submitLa
                onChange={(e) => setDescription(e.target.value)} />
       </Field>
       <FormError error={error} />
-      <Buttons busy={busy || !name.trim()} label={submitLabel ?? (building ? "Save" : "Add building")} onCancel={onCancel} />
+      <Buttons busy={busy} disabled={!name.trim()} label={submitLabel ?? (building ? "Save" : "Add building")} onCancel={onCancel} />
     </form>
   );
 }
@@ -191,7 +193,7 @@ export function FloorForm({ buildingId, floor, onSaved, onCancel, submitLabel }:
                onChange={(e) => setElevation(e.target.value)} aria-invalid={!elevationValid} />
       </Field>
       <FormError error={error} />
-      <Buttons busy={busy || !name.trim() || !numberValid || !elevationValid}
+      <Buttons busy={busy} disabled={!name.trim() || !numberValid || !elevationValid}
                label={submitLabel ?? (floor ? "Save" : "Add floor")} onCancel={onCancel} />
     </form>
   );
