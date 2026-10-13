@@ -46,31 +46,37 @@ function useFacility(): { facility: Facility | null; error: unknown; reload: () 
   const floors = useAll<Floor>("/floors");
   const nodes = useAll<GraphNode>("/nodes");
 
+  const hospitalList = hospitals.data;
+  const buildingList = buildings.data;
+  const floorList = floors.data;
+  const nodeList = nodes.data;
+
   const facility = useMemo<Facility | null>(() => {
-    if (!hospitals.data || !buildings.data || !floors.data || !nodes.data) return null;
-    const hospitalName = new Map(hospitals.data.map((h) => [h.id, h.name]));
-    const buildingById = new Map(buildings.data.map((b) => [b.id, b]));
-    const floorById = new Map(floors.data.map((f) => [f.id, f]));
+    if (!hospitalList || !buildingList || !floorList || !nodeList) return null;
+    const hospitalName = new Map(hospitalList.map((h) => [h.id, h.name]));
+    const buildingById = new Map(buildingList.map((b) => [b.id, b]));
+    const floorById = new Map(floorList.map((f) => [f.id, f]));
     const buildingLabel = (id: number) => {
       const building = buildingById.get(id);
       return building ? `${hospitalName.get(building.hospital_id) ?? "?"} / ${building.name}` : `Building ${id}`;
     };
     const places = new Map<number, PlaceRef>();
-    for (const node of nodes.data) {
+    for (const node of nodeList) {
       const floor = floorById.get(node.floor_id);
       if (!floor) continue;
       places.set(node.id, { id: node.id, name: node.name, type: node.type, floor_id: floor.id, building_id: floor.building_id });
     }
+    const allFloors = floorList;
     return {
-      buildings: [...buildings.data].sort((a, b) => buildingLabel(a.id).localeCompare(buildingLabel(b.id))),
+      buildings: [...buildingList].sort((a, b) => buildingLabel(a.id).localeCompare(buildingLabel(b.id))),
       floorsOf: (buildingId) =>
-        floors.data!.filter((f) => f.building_id === buildingId).sort((a, b) => a.floor_number - b.floor_number),
+        allFloors.filter((f) => f.building_id === buildingId).sort((a, b) => a.floor_number - b.floor_number),
       placesOf: (floorId) =>
         [...places.values()].filter((p) => p.floor_id === floorId).sort((a, b) => a.name.localeCompare(b.name)),
       places,
       buildingLabel,
     };
-  }, [hospitals.data, buildings.data, floors.data, nodes.data]);
+  }, [hospitalList, buildingList, floorList, nodeList]);
 
   return {
     facility,

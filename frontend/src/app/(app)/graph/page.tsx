@@ -149,7 +149,8 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
     setNodes((current) => applyNodeChanges(changes, current));
   }, []);
 
-  const onNodeDragStop = useCallback<NodeMouseHandler<PlaceNode>>((_event, node) => {
+  // React Flow passes a native mouse or touch event here, so the event is not used.
+  const onNodeDragStop = useCallback((_event: unknown, node: PlaceNode) => {
     const x = roundPosition(node.position.x);
     const y = roundPosition(node.position.y);
     setMoveError(null);
