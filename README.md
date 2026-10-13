@@ -93,7 +93,30 @@ TEST_DATABASE_URL=postgresql+psycopg://health11:<your-password>@127.0.0.1:5433/h
 Each test runs inside a transaction that is rolled back, so no test data is kept.
 The test database must already be migrated (step 3).
 
-## 6. Continuous integration
+## 6. Run the website (frontend)
+
+The website is in `frontend/` (Next.js 16, TypeScript, Tailwind). It needs
+Node.js 22.18 or newer and the API running (step 4).
+
+```powershell
+cd frontend
+Copy-Item .env.example .env.local     # first time only; BACKEND_URL points at the API
+npm install                           # first time and after dependency changes
+npm run dev                           # http://localhost:3000
+```
+
+Checks (run from `frontend/`): `npm test` (unit tests), `npm run lint`,
+`npm run typecheck`, `npm run build`.
+
+How sessions work: the browser only talks to the website. The website's own
+server logs in at the API and keeps the tokens in httpOnly, SameSite=Strict
+cookies that page scripts cannot read (`__Host-` cookies over HTTPS in
+production); it renews them automatically. Requests that change data must come
+from the website's own pages. In production put nginx (or similar) in front and
+set `TRUST_PROXY_HEADERS=true` so the API's login rate limits see each
+visitor's real IP; leave it `false` otherwise.
+
+## 7. Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request: Python 3.11,
 PostgreSQL 16, migrations up → down → up, a model/migration drift check

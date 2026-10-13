@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+/* Design tokens from docs/design/preview.html (light theme only).
+   One change for accessibility: form-field borders use --color-tx2 instead of
+   --color-line, because #E2E8F0 on white is 1.2:1 and form fields need 3:1. */
+@theme {
+  --color-page: #f8fafc;
+  --color-card: #ffffff;
+  --color-line: #e2e8f0;
+  --color-pri: #7db8e8;
+  --color-ok: #bfe8d0;
+  --color-warn: #fce9b2;
+  --color-bad: #f9c5c5;
+  --color-tagp: #d6e9f8;
+  --color-tx: #334155;
+  --color-tx2: #64748b;
+  --color-ink: #1e3a5f;
+  --color-note: #5b4a14;
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+@layer base {
+  html {
+    scroll-padding-top: env(safe-area-inset-top, 0px);
+  }
+  body {
+    margin: 0;
+    background: var(--color-page);
+    color: var(--color-tx);
+    font: 14px/1.55 var(--font-sans);
+  }
+  h1 {
+    font-size: 22px;
+    color: var(--color-ink);
+    margin: 0 0 4px;
+    font-weight: 700;
+  }
+  h2 {
+    font-size: 15px;
+    color: var(--color-ink);
+    margin: 0 0 10px;
+    font-weight: 700;
+  }
+  a {
+    color: var(--color-ink);
+  }
+  label {
+    display: block;
+    color: var(--color-tx2);
+    font-size: 12.5px;
+    margin: 10px 0 4px;
+  }
+  input,
+  select,
+  textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--color-tx2);
+    border-radius: 8px;
+    font: inherit;
+    color: var(--color-tx);
+    background: #fff;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .sub {
+    color: var(--color-tx2);
+    margin: 0 0 18px;
+  }
+  .card {
+    background: var(--color-card);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 1px 2px rgba(51, 65, 85, 0.05);
+  }
+  .big {
+    font-size: 26px;
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+  .sm {
+    color: var(--color-tx2);
+    font-size: 12.5px;
+  }
+  .btn {
+    display: inline-block;
+    background: var(--color-pri);
+    color: var(--color-ink);
+    border: 0;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn.l {
+    background: #fff;
+    border: 1px solid var(--color-line);
+    color: var(--color-tx);
+    font-weight: 500;
+  }
+  .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .note {
+    background: var(--color-warn);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 12.5px;
+    color: var(--color-note);
+  }
+  .wrap {
+    overflow-x: auto;
+  }
+  .wrap table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .wrap th,
+  .wrap td {
+    text-align: left;
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--color-line);
+    white-space: nowrap;
+  }
+  .wrap th {
+    color: var(--color-tx2);
+    font-weight: 500;
+    font-size: 12.5px;
+  }
+  .tag {
+    padding: 2px 9px;
+    border-radius: 99px;
+    font-size: 12px;
+    color: var(--color-ink);
+  }
+  .t-ok {
+    background: var(--color-ok);
+  }
+  .t-w {
+    background: var(--color-warn);
+  }
+  .t-b {
+    background: var(--color-bad);
+  }
+  .t-p {
+    background: var(--color-tagp);
+  }
+  .field-error {
+    color: #9b1c1c;
+    font-size: 12.5px;
+    margin: 4px 0 0;
+  }
+}
