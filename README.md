@@ -108,6 +108,13 @@ npm run dev                           # http://localhost:3000
 Checks (run from `frontend/`): `npm test` (unit tests), `npm run lint`,
 `npm run typecheck`, `npm run build`.
 
+Use a Node.js **LTS** release (22 or 24); Node.js recommends only LTS lines for
+production. `npm audit --omit=dev` checks the packages the website ships.
+`npm audit` also reports GHSA-vfj7-8cjw-p6xm in `braces`, which reaches the
+project only through the lint tooling (`eslint-config-next`), has no fixed
+version yet, and is not part of the website; `npm audit fix --force` would
+downgrade the lint config to an incompatible version, so do not run it.
+
 How sessions work: the browser only talks to the website. The website's own
 server logs in at the API and keeps the tokens in httpOnly, SameSite=Strict
 cookies that page scripts cannot read (`__Host-` cookies over HTTPS in

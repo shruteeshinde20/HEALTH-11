@@ -32,6 +32,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         if (error instanceof ApiError && error.status === 401) {
           const next = window.location.pathname + window.location.search;
+          // Full page load on purpose: the ended session's data must not stay in memory.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.assign(`/login?next=${encodeURIComponent(next)}`);
           return;
         }
@@ -47,6 +49,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       await sessionRequest("logout", {});
     } finally {
+      // Full page load on purpose: nothing of this user's data may stay in memory.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/login");
     }
   }, []);

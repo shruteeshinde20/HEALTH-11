@@ -17,6 +17,9 @@ export function withQuery(path: string, query?: Query): string {
 
 function goToLogin(): void {
   const next = window.location.pathname + window.location.search;
+  // A full page load (not client-side navigation) on purpose: when a session
+  // ends, nothing loaded for it may stay in the browser's memory.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.assign(`/login?next=${encodeURIComponent(next)}`);
 }
 
