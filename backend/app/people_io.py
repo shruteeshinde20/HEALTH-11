@@ -151,11 +151,15 @@ def _places(db: Session, organization_id: int) -> dict[LocationKey, int]:
 
 def _export(db: Session, user: User, kind: Kind) -> Response:
     where = {node_id: key for key, node_id in _places(db, user.organization_id).items()}
-    people = db.scalars(
-        select(kind.model)
-        .where(kind.model.organization_id == user.organization_id, kind.model.deleted_at.is_(None))
-        .order_by(getattr(kind.model, kind.code), kind.model.id)
-    ).all()
+    # Sorted here, not by the database: text sorting in PostgreSQL depends on the
+    # server's locale, and the same data should give the same file everywhere.
+    people = sorted(
+        db.scalars(
+            select(kind.model)
+            .where(kind.model.organization_id == user.organization_id, kind.model.deleted_at.is_(None))
+        ),
+        key=lambda person: (getattr(person, kind.code), person.id),
+    )
 
     output = io.StringIO()
     writer = csv.writer(output, lineterminator="\r\n")
