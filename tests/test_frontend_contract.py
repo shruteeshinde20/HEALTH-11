@@ -4,7 +4,7 @@ against the real API. If the website and the API drift apart, this fails.
 Covers the Facility Manager and the onboarding wizard (Phase 10, group 1) and
 the Graph Builder and Scenario Builder (group 2), and Live Simulation and
 Algorithm Comparison (group 3), and Patients & Staff, AI Assistant and Reports &
-History (group 4).
+History (group 4), and Admin and Settings / Profile (group 5).
 """
 
 import pytest
@@ -504,3 +504,57 @@ def test_reports_and_history_requests(client):
     alerts = call(client, h, "GET", "/alerts", 200).json()
     assert alerts["message"].startswith("More data needed") and alerts["runs_considered"] == 3
     assert alerts["method"]
+
+
+def test_admin_requests(client):
+    h = admin(client)
+    me = call(client, h, "GET", "/auth/me", 200).json()
+    # UserForm, add: name, email, role label, first password.
+    added = call(client, h, "POST", "/users", 201, json={
+        "full_name": "Ravi Kumar", "email": "ravi@example.com", "role": "Emergency Commander",
+        "password": "FirstPassword#123"}).json()
+    assert added["role"] == "Emergency Commander" and added["is_active"] is True
+    # UserForm, edit: name and role, active flag, and an optional new password.
+    edited = call(client, h, "PATCH", f"/users/{added['id']}", 200, json={
+        "full_name": "Ravi K", "role": "Staff User", "is_active": False, "password": "ResetPassword#456"}).json()
+    assert (edited["full_name"], edited["role"], edited["is_active"]) == ("Ravi K", "Staff User", False)
+    # Editing yourself never sends is_active; the API also refuses self-deactivation and losing the last admin.
+    call(client, h, "PATCH", f"/users/{me['id']}", 200, json={"full_name": "Admin", "role": "Administrator"})
+    refused = call(client, h, "PATCH", f"/users/{me['id']}", 409, json={"full_name": "Admin", "role": "Staff User"}).json()
+    assert refused["error"]["message"] == "The organization must keep at least one active Administrator"
+    # The list (apiAll) and delete.
+    users = call(client, h, "GET", "/users", 200, params={"limit": 200, "offset": 0}).json()["items"]
+    assert {"id", "email", "full_name", "role", "is_active", "created_at"} <= set(users[0])
+    assert call(client, h, "DELETE", f"/users/{added['id']}", 204).content == b""
+
+    # Audit log: 50 per page, newest first, exact filters; details never hold passwords.
+    page = call(client, h, "GET", "/audit_log", 200, params={"limit": 50, "offset": 0}).json()
+    assert page["total"] >= 5
+    entry = page["items"][0]
+    assert {"id", "created_at", "actor_user_id", "action", "entity_type", "entity_id", "details", "ip_address"} <= set(entry)
+    updates = call(client, h, "GET", "/audit_log", 200, params={
+        "limit": 50, "offset": 0, "action": "user.updated", "entity_type": "user", "actor_user_id": me["id"]}).json()
+    assert updates["total"] >= 2 and all(e["action"] == "user.updated" for e in updates["items"])
+    assert "Password#" not in str(page)
+
+
+def test_settings_requests(client):
+    h = admin(client)
+    # Profile: PATCH /auth/me through the /api/backend proxy (auth/me is allowed there).
+    assert call(client, h, "PATCH", "/auth/me", 200, json={"full_name": "New Name"}).json()["full_name"] == "New Name"
+    # /api/session/password sends this body and stores the returned tokens.
+    changed = call(client, h, "POST", "/auth/change-password", 200, json={
+        "current_password": PASSWORD, "new_password": "NewStrongPass#987"}).json()
+    assert {"access_token", "refresh_token", "expires_in", "user"} <= set(changed)
+    h = {"Authorization": f"Bearer {changed['access_token']}"}
+
+    # Model parameters: specs, then POST for the first own value, PATCH to change it, DELETE for "Use default".
+    specs = call(client, h, "GET", "/parameters/specs", 200).json()
+    spec = next(s for s in specs if s["name"] == "speed_wheelchair_m_per_s")
+    assert set(spec) == {"name", "default", "unit", "minimum", "maximum", "meaning"}
+    saved = call(client, h, "POST", "/parameters", 201, json={
+        "name": spec["name"], "value": "0.7", "unit": spec["unit"], "source": "assumed, to be validated"}).json()
+    call(client, h, "PATCH", f"/parameters/{saved['id']}", 200, json={"value": "0.75", "source": "Local drill 2026"})
+    stored = call(client, h, "GET", "/parameters", 200, params={"limit": 200, "offset": 0}).json()["items"]
+    assert [(p["name"], p["value"], p["source"]) for p in stored] == [(spec["name"], "0.75", "Local drill 2026")]
+    assert call(client, h, "DELETE", f"/parameters/{saved['id']}", 204).content == b""

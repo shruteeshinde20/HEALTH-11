@@ -9,7 +9,7 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -493,5 +493,79 @@ def logout(payload: RefreshRequest, request: Request, db: Session = Depends(get_
 @router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+class ProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    full_name: str = Field(min_length=2, max_length=200)
+
+    @field_validator("full_name")
+    @classmethod
+    def trim_name(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("Must contain at least two non-space characters")
+        return value
+
+
+@router.patch("/me", response_model=UserResponse)
+def update_me(payload: ProfileUpdate, request: Request, current_user: User = Depends(get_current_user),
+              db: Session = Depends(get_db)):
+    """Users change their own display name (email and role are managed by Administrators)."""
+    current_user.full_name = payload.full_name
+    _audit(db, current_user.organization_id, current_user.id, "user.profile_updated", "user",
+           current_user.id, request, details={"fields": ["full_name"]})
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+class PasswordChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    current_password: str = Field(min_length=1, max_length=72)
+    new_password: str = Field(min_length=12, max_length=72)
+
+    @field_validator("new_password")
+    @classmethod
+    def strong(cls, value: str) -> str:
+        return check_password_strength(value)
+
+
+@router.post("/change-password")
+def change_password(payload: PasswordChange, request: Request, current_user: User = Depends(get_current_user),
+                    db: Session = Depends(get_db)):
+    """Change your own password. Every other session of this user is signed out
+    (its refresh tokens are revoked) and this one gets new tokens. Wrong
+    current passwords count towards the same limit as failed logins."""
+    settings = get_settings()
+    key = rate_limit.bucket_key("password:user", str(current_user.id))
+    rate_limit.ensure_not_limited(db, key, settings.login_max_failures_per_account,
+                                  settings.rate_limit_window_seconds)
+    if not _password_matches(payload.current_password, current_user.password_hash):
+        rate_limit.record_event(db, key)
+        _audit(db, current_user.organization_id, current_user.id, "auth.password_change_failed",
+               "user", current_user.id, request)
+        db.commit()
+        # 400, not 401: the session itself is fine.
+        raise HTTPException(status_code=400, detail="The current password is not correct")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=400, detail="Choose a new password that is different from the current one")
+
+    current_user.password_hash = _password_hash(payload.new_password)
+    db.execute(
+        update(RefreshToken)
+        .where(
+            RefreshToken.organization_id == current_user.organization_id,
+            RefreshToken.user_id == current_user.id,
+            RefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=func.now())
+    )
+    tokens = _new_token_pair(db, current_user)
+    # Never log the password; only that it changed.
+    _audit(db, current_user.organization_id, current_user.id, "user.password_changed", "user",
+           current_user.id, request)
+    db.commit()
+    return {"user": UserResponse.model_validate(current_user), **tokens}
 
 

@@ -15,8 +15,8 @@ export const APP_PAGES: AppPage[] = [
   { href: "/people", label: "Patients & Staff", ready: true },
   { href: "/assistant", label: "AI Assistant", ready: true },
   { href: "/reports", label: "Reports & History", ready: true },
-  { href: "/admin", label: "Admin", ready: false, roles: ["Administrator"] },
-  { href: "/settings", label: "Settings / Profile", ready: false },
+  { href: "/admin", label: "Admin", ready: true, roles: ["Administrator"] },
+  { href: "/settings", label: "Settings / Profile", ready: true },
 ];
 
 export function visiblePages(role: Role | null): AppPage[] {

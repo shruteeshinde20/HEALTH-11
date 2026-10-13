@@ -249,3 +249,22 @@ export type AssistantSummary = {
   method: string;
   data_notice: string | null;
 };
+
+/** GET /users (Administrators). */
+export type ManagedUser = User & { created_at: string; updated_at: string };
+
+/** GET /audit_log (Administrators). */
+export type AuditEntry = {
+  id: number;
+  created_at: string;
+  actor_user_id: number | null;
+  action: string;
+  entity_type: string;
+  entity_id: number | null;
+  details: Record<string, unknown> | null;
+  ip_address: string | null;
+};
+
+/** GET /parameters and GET /parameters/specs. */
+export type StoredParameter = { id: number; name: string; value: string; unit: string | null; source: string };
+export type ParameterSpec = { name: string; default: number; unit: string; minimum: number; maximum: number; meaning: string };

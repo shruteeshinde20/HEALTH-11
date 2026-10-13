@@ -356,7 +356,7 @@ def test_analysis_end_to_end(client):
     assert any("not machine learning" in line for line in body["method"])
 
 
-def test_analysis_uses_organization_parameters_with_their_source(client):
+def test_analysis_uses_organization_parameters_with_their_source(client, db_session):
     site = Site(client, "Param Org")
     for i in range(12):
         site.post("/staff", {"staff_code": f"S{i}", "full_name": f"N{i}", "role": "nurse",
@@ -370,8 +370,16 @@ def test_analysis_uses_organization_parameters_with_their_source(client):
     assert used["bottleneck_queue_minutes"]["source"] == "Hospital fire plan 2026"
     assert edge_row(body, "C1 – WardA")["is_bottleneck"] is True  # 12 / 10 = 1.2 >= 1
 
-    site.post("/parameters", {"name": "hazard_risk_cost_metres", "value": "lots",
-                              "source": "typo"})
+    # The API refuses a value the models cannot use (Phase 10, group 5) ...
+    refused = client.post(f"{API}/parameters", headers=site.headers, json={
+        "name": "hazard_risk_cost_metres", "value": "lots", "source": "typo"})
+    assert refused.status_code == 422
+    # ... and one already stored (saved before that check existed) is still caught when used.
+    from app.models.simulation import Parameter
+    organization_id = client.get(f"{API}/auth/me", headers=site.headers).json()["organization_id"]
+    db_session.add(Parameter(organization_id=organization_id, name="hazard_risk_cost_metres",
+                             value="lots", source="typo"))
+    db_session.flush()
     bad = site.analyse(scenario["id"])
     assert bad.status_code == 422
     assert "hazard_risk_cost_metres" in bad.json()["error"]["message"]

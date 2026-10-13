@@ -2,12 +2,17 @@
 
 `source` is required: a citation (for example NFPA or NIST research) or, if
 none exists, the text "assumed, to be validated".
+
+GET /parameters/specs lists the parameters the models read, with default,
+unit, allowed range and meaning. Values saved for those names must be numbers
+inside the range, so a typo cannot stop simulations from running.
 """
 
+import math
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -30,6 +35,7 @@ from app.audit import record_audit
 from app.db_session import get_db
 from app.models.simulation import Parameter
 from app.permissions import Editor, Reader
+from app.services.model_parameters import SPECS
 
 router = APIRouter(tags=["Parameters"])
 
@@ -86,6 +92,38 @@ def list_parameters(db: Db, user: Reader, paging: Paging, q: SearchQuery = None)
     return paginate(db, stmt, paging, Parameter.name, Parameter.id)
 
 
+class ParameterSpecOut(BaseModel):
+    name: str
+    default: float
+    unit: str
+    minimum: float
+    maximum: float
+    meaning: str
+
+
+@router.get("/parameters/specs", response_model=list[ParameterSpecOut])
+def parameter_specs(user: Reader):
+    """The parameters the models use (defaults apply when none is saved)."""
+    return [ParameterSpecOut(name=spec.name, default=spec.default, unit=spec.unit, minimum=spec.minimum,
+                             maximum=spec.maximum, meaning=spec.meaning)
+            for spec in sorted(SPECS.values(), key=lambda spec: spec.name)]
+
+
+def _check_known(name: str, value: str) -> None:
+    spec = SPECS.get(name)
+    if spec is None:
+        return
+    try:
+        number = float(value)
+    except ValueError:
+        number = math.nan
+    if not math.isfinite(number) or not spec.minimum <= number <= spec.maximum:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{name} must be a number between {spec.minimum:g} and {spec.maximum:g} ({spec.unit})",
+        )
+
+
 @router.get("/parameters/{parameter_id}", response_model=ParameterOut)
 def get_parameter(parameter_id: int, db: Db, user: Reader):
     return get_active(db, Parameter, parameter_id, user.organization_id, "Parameter")
@@ -93,6 +131,7 @@ def get_parameter(parameter_id: int, db: Db, user: Reader):
 
 @router.post("/parameters", response_model=ParameterOut, status_code=status.HTTP_201_CREATED)
 def create_parameter(payload: ParameterCreate, db: Db, user: Editor, request: Request):
+    _check_known(payload.name, payload.value)
     parameter = Parameter(organization_id=user.organization_id, **payload.model_dump())
     db.add(parameter)
     flush_or_conflict(db, CONFLICT)
@@ -106,6 +145,7 @@ def create_parameter(payload: ParameterCreate, db: Db, user: Editor, request: Re
 def update_parameter(parameter_id: int, payload: ParameterUpdate, db: Db, user: Editor, request: Request):
     parameter = get_active(db, Parameter, parameter_id, user.organization_id, "Parameter")
     changes = changes_from(payload, not_null={"name", "value", "source"})
+    _check_known(changes.get("name", parameter.name), changes.get("value", parameter.value))
     for field, value in changes.items():
         setattr(parameter, field, value)
     flush_or_conflict(db, CONFLICT)

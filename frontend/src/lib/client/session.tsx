@@ -14,7 +14,12 @@ type SessionState =
   | { status: "ready"; user: User }
   | { status: "error"; error: unknown };
 
-type SessionValue = { state: SessionState; logout: () => Promise<void>; retry: () => void };
+type SessionValue = {
+  state: SessionState;
+  logout: () => Promise<void>;
+  retry: () => void;
+  updateUser: (user: User) => void;   // after the user changed their own profile
+};
 
 const SessionContext = createContext<SessionValue | null>(null);
 
@@ -60,7 +65,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAttempt((n) => n + 1);
   }, []);
 
-  return <SessionContext.Provider value={{ state, logout, retry }}>{children}</SessionContext.Provider>;
+  const updateUser = useCallback((user: User) => setState({ status: "ready", user }), []);
+
+  return <SessionContext.Provider value={{ state, logout, retry, updateUser }}>{children}</SessionContext.Provider>;
 }
 
 export function useSession(): SessionValue {

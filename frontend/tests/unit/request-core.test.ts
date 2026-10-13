@@ -25,7 +25,7 @@ test("the visitor's IP is used only behind a trusted proxy, right-most entry", (
 test("token endpoints and odd paths are never passed to the backend", () => {
   assert.equal(backendPath(["floors", "12", "route"]), "/floors/12/route");
   assert.equal(backendPath(["auth", "me"]), "/auth/me");
-  for (const blocked of [["auth", "login"], ["auth", "refresh"], ["auth", "logout"], ["auth", "register-organization"],
+  for (const blocked of [["auth", "login"], ["auth", "refresh"], ["auth", "logout"], ["auth", "register-organization"], ["auth", "change-password"],
                          ["auth"], ["simulations", "4", "stream-token"], ["..", "health"], ["floors", "a%2Fb"], ["floors", ""], [], ["a b"]]) {
     assert.equal(backendPath(blocked), null, JSON.stringify(blocked));
   }
