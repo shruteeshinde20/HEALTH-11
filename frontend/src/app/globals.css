@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* React Flow (Graph Builder) base styles; after Tailwind so they are not reset. */
+@import "@xyflow/react/dist/style.css";
 
 /* Design tokens from docs/design/preview.html (light theme only).
    One change for accessibility: form-field borders use --color-tx2 instead of

@@ -15,12 +15,12 @@ import {
   FLOOR_CSV_COLUMNS, FLOOR_IMPORT_ACCEPT, MAX_FLOOR_FILE_BYTES, floorImportType,
 } from "@/lib/shared/files.ts";
 
-function FormError({ error }: { error: unknown }) {
+export function FormError({ error }: { error: unknown }) {
   if (error === null || Object.keys(fieldErrors(error)).length) return null;
   return <p role="alert" className="field-error">{describeError(error)}</p>;
 }
 
-function Field({ id, label, error, hint, children }: {
+export function Field({ id, label, error, hint, children }: {
   id: string; label: string; error?: string; hint?: string; children: ReactNode;
 }) {
   return (
@@ -33,7 +33,7 @@ function Field({ id, label, error, hint, children }: {
   );
 }
 
-function Buttons({ busy, disabled = false, label, onCancel }: {
+export function Buttons({ busy, disabled = false, label, onCancel }: {
   busy: boolean; disabled?: boolean; label: string; onCancel?: () => void;
 }) {
   return (
@@ -45,7 +45,7 @@ function Buttons({ busy, disabled = false, label, onCancel }: {
 }
 
 /** "" -> null, so optional text can be cleared. */
-const optional = (value: string) => (value.trim() ? value.trim() : null);
+export const optional = (value: string) => (value.trim() ? value.trim() : null);
 
 // --- Time zones -------------------------------------------------------------------------
 

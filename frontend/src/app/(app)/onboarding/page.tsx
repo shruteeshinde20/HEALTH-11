@@ -11,6 +11,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import {
   BuildingForm, FloorForm, FloorImport, HospitalForm,
 } from "@/components/facility-forms.tsx";
+import { RunResult } from "@/components/run-result.tsx";
 import { Card, ErrorState, LoadingState, PageHeader, Tag } from "@/components/ui.tsx";
 import { apiRequest } from "@/lib/client/api.ts";
 import { fieldErrors } from "@/lib/client/field-errors.ts";
@@ -21,12 +22,12 @@ import type {
   Building, Floor, FloorGraph, Hospital, HazardType, Page, RunDetail, RunSummary,
 } from "@/lib/shared/api-types.ts";
 import { describeError } from "@/lib/shared/errors.ts";
-import { ALGORITHM_LABELS, formatSeconds } from "@/lib/shared/format.ts";
+import { ALGORITHM_LABELS } from "@/lib/shared/format.ts";
+import { hazardName } from "@/lib/shared/graph.ts";
 import { APP_PAGES } from "@/lib/shared/pages.ts";
+import { HAZARD_TYPES } from "@/lib/shared/scenario.ts";
 
 const graphBuilder = APP_PAGES.find((page) => page.href === "/graph");
-const peoplePage = APP_PAGES.find((page) => page.href === "/people");
-const HAZARD_TYPES: HazardType[] = ["fire", "smoke", "hazmat", "structural"];
 
 type StepState = "done" | "current" | "later";
 
@@ -193,7 +194,7 @@ function FirstSimulation({ floor, graph, onDone }: { floor: Floor; graph: FloorG
     if (withHazard && (!originNode || !spreadValid)) return;
     const detail = await run(async () => {
       const hazards = withHazard && originNode ? [{
-        name: `${hazardType[0]!.toUpperCase()}${hazardType.slice(1)} at ${originNode.name}`,
+        name: hazardName(hazardType, originNode.name),
         type: hazardType, origin_node_id: originNode.id, severity: Number(severity), spread_rate: spreadValue,
       }] : [];
       const scenario = await apiRequest<{ id: number }>("/scenarios", { method: "POST", body: { name: name.trim(), hazards } });
@@ -207,33 +208,10 @@ function FirstSimulation({ floor, graph, onDone }: { floor: Floor; graph: FloorG
   }
 
   if (result) {
-    const summary = result.summary;
     return (
-      <div role="status">
-        {!summary || summary.total === 0 ? (
-          <p>
-            <Tag tone="p">Nobody to evacuate</Tag> The simulation was saved, but nobody is placed in this building yet.
-            {peoplePage?.ready ? <> Add people on <Link href={peoplePage.href}>Patients &amp; Staff</Link>.</>
-                               : " Placing patients and staff comes with the Patients & Staff page."}
-          </p>
-        ) : (
-          <>
-            <p>
-              <Tag tone={summary.all_evacuated ? "ok" : "b"}>{summary.all_evacuated ? "Everyone out" : "Not everyone out"}</Tag>{" "}
-              {summary.evacuated} of {summary.total} people reached an exit
-              {summary.all_evacuated ? ` in ${formatSeconds(summary.evacuation_time_s)}.` : "."}
-            </p>
-            <ul>
-              {result.recommendations.map((item, i) => <li key={i}>{item.text}</li>)}
-            </ul>
-          </>
-        )}
-        <p className="flex flex-wrap gap-2">
-          <a className="btn l" href={`/api/backend/reports/${result.id}?format=pdf`} download>Report (PDF)</a>
-          <a className="btn l" href={`/api/backend/reports/${result.id}?format=csv`} download>Report (CSV)</a>
-          <button type="button" className="btn" onClick={onDone}>Finish</button>
-        </p>
-      </div>
+      <RunResult result={result}>
+        <button type="button" className="btn" onClick={onDone}>Finish</button>
+      </RunResult>
     );
   }
 

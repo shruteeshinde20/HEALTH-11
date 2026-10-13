@@ -8,8 +8,8 @@ export type AppPage = { href: string; label: string; ready: boolean; roles?: Rol
 export const APP_PAGES: AppPage[] = [
   { href: "/dashboard", label: "Dashboard", ready: true },
   { href: "/facilities", label: "Facility Manager", ready: true },
-  { href: "/graph", label: "Graph Builder", ready: false },
-  { href: "/scenarios", label: "Scenario Builder", ready: false },
+  { href: "/graph", label: "Graph Builder", ready: true },
+  { href: "/scenarios", label: "Scenario Builder", ready: true },
   { href: "/live", label: "Live Simulation", ready: false },
   { href: "/compare", label: "Algorithm Comparison", ready: false },
   { href: "/people", label: "Patients & Staff", ready: false },

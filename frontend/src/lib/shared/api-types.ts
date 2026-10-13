@@ -76,13 +76,55 @@ export type Floor = {
   elevation_metres: number | null;
 };
 
-export type GraphNode = { id: number; name: string; type: string; floor_id: number };
+export type GraphNode = {
+  id: number;
+  floor_id: number;
+  name: string;
+  type: string;
+  x: number;
+  y: number;
+  capacity: number;
+  is_blocked: boolean;
+  is_evacuation_lift: boolean;
+};
 
-export type FloorGraph = { nodes: GraphNode[]; edges: { id: number }[] };
+export type GraphEdge = {
+  id: number;
+  from_node_id: number;
+  to_node_id: number;
+  distance: number;
+  width: number;
+  max_flow: number;
+  wheelchair_accessible: boolean;
+  stretcher_accessible: boolean;
+  is_blocked: boolean;
+};
+
+export type FloorGraph = { floor_id: number; nodes: GraphNode[]; edges: GraphEdge[] };
 
 export type FloorImportResult = { floor_id: number; nodes_imported: number; edges_imported: number };
 
 export type HazardType = "fire" | "smoke" | "hazmat" | "structural";
+
+export type Hazard = {
+  id: number;
+  name: string;
+  type: HazardType;
+  origin_node_id: number;
+  spread_rate: number;
+  severity: number;
+  is_active: boolean;
+};
+
+export type Scenario = {
+  id: number;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  hazards: Hazard[];
+  created_at: string;
+  updated_at: string;
+};
 
 export type RunDetail = RunSummary & {
   recommendations: { severity: string; text: string }[];
