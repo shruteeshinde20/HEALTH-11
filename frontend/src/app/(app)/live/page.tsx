@@ -25,15 +25,16 @@ import {
   MOBILITY_COLOURS, MOBILITY_LABELS, STREAM_SPEEDS, clock, exitLoadRows, floorView, mapFloors, spread,
   type LiveFrame, type RunMap,
 } from "@/lib/shared/live.ts";
-import { APP_PAGES, SAFETY_NOTICE } from "@/lib/shared/pages.ts";
+import { SAFETY_NOTICE, pageFor } from "@/lib/shared/pages.ts";
 import { HAZARD_TYPES, MAX_SPREAD, SEVERITY_LABELS } from "@/lib/shared/scenario.ts";
 
-const scenarioBuilder = APP_PAGES.find((page) => page.href === "/scenarios");
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 // --- Page ---------------------------------------------------------------------------------
 
 function LiveSimulation() {
+  const user = useUser();
+  const scenarioBuilder = pageFor("/scenarios", user.role);
   const router = useRouter();
   const params = useSearchParams();
   const runs = useApi<Page<RunSummary>>("/simulation_runs", { limit: 50 });
@@ -58,7 +59,7 @@ function LiveSimulation() {
         <Card>
           <EmptyState>
             No simulation has been run yet.{" "}
-            {scenarioBuilder?.ready && <>Run one from the <Link href={scenarioBuilder.href}>Scenario Builder</Link>.</>}
+            {scenarioBuilder && <>Run one from the <Link href={scenarioBuilder.href}>Scenario Builder</Link>.</>}
           </EmptyState>
         </Card>
       )}

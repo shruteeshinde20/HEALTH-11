@@ -8,7 +8,9 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
+import { EvacuationTimeline } from "@/components/charts.tsx";
 import { FormError } from "@/components/facility-forms.tsx";
+import { RunResult } from "@/components/run-result.tsx";
 import { ALERT_TAGS, RunStatus } from "@/components/run-status.tsx";
 import { Card, DataTable, EmptyState, ErrorState, LoadingState, PageHeader, Tag } from "@/components/ui.tsx";
 import { apiRequest } from "@/lib/client/api.ts";
@@ -16,13 +18,11 @@ import { useUser } from "@/lib/client/session.tsx";
 import { useAction } from "@/lib/client/use-action.ts";
 import { useAll, useApi } from "@/lib/client/use-api.ts";
 import { useFacility, type Facility } from "@/lib/client/use-facility.ts";
-import type { Alerts, Page, Prediction, RunSummary, Scenario } from "@/lib/shared/api-types.ts";
+import type { Alerts, Page, Prediction, RunDetail, RunSummary, Scenario } from "@/lib/shared/api-types.ts";
 import { ALGORITHM_LABELS, algorithmLabel, formatDateTime, formatSeconds } from "@/lib/shared/format.ts";
-import { APP_PAGES } from "@/lib/shared/pages.ts";
+import { pageFor } from "@/lib/shared/pages.ts";
 
 const PAGE_SIZE = 20;
-const livePage = APP_PAGES.find((page) => page.href === "/live");
-const assistantPage = APP_PAGES.find((page) => page.href === "/assistant");
 
 export default function ReportsPage() {
   const user = useUser();
@@ -42,8 +42,12 @@ export default function ReportsPage() {
 // --- Run history -------------------------------------------------------------------------
 
 function History({ scenarios }: { scenarios: Scenario[] }) {
+  const user = useUser();
+  const livePage = pageFor("/live", user.role);
+  const assistantPage = pageFor("/assistant", user.role);
   const [scenarioId, setScenarioId] = useState<number | null>(null);
   const [page, setPage] = useState(0);
+  const [detailId, setDetailId] = useState<number | null>(null);
   const runs = useApi<Page<RunSummary>>("/simulation_runs", {
     limit: PAGE_SIZE, offset: page * PAGE_SIZE, scenario_id: scenarioId ?? undefined,
   });
@@ -84,8 +88,12 @@ function History({ scenarios }: { scenarios: Scenario[] }) {
                 <span key="links" className="flex flex-wrap gap-2">
                   <a className="btn l" href={`/api/backend/reports/${run.id}?format=pdf`} download>PDF</a>
                   <a className="btn l" href={`/api/backend/reports/${run.id}?format=csv`} download>CSV</a>
-                  {livePage?.ready && <Link className="btn l" href={`${livePage.href}?run=${run.id}`}>Watch</Link>}
-                  {assistantPage?.ready && <Link className="btn l" href={`${assistantPage.href}?run=${run.id}`}>Explain</Link>}
+                  {livePage && <Link className="btn l" href={`${livePage.href}?run=${run.id}`}>Watch</Link>}
+                  {assistantPage && <Link className="btn l" href={`${assistantPage.href}?run=${run.id}`}>Explain</Link>}
+                  <button type="button" className="btn l" aria-expanded={detailId === run.id}
+                          onClick={() => setDetailId(detailId === run.id ? null : run.id)}>
+                    {detailId === run.id ? "Hide details" : "Details"}
+                  </button>
                 </span>,
               ],
             }))} />
@@ -94,9 +102,39 @@ function History({ scenarios }: { scenarios: Scenario[] }) {
             <button type="button" className="btn l" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Newer</button>
             <button type="button" className="btn l" disabled={last >= total} onClick={() => setPage((p) => p + 1)}>Older</button>
           </p>
+          {detailId !== null && <RunDetails key={detailId} runId={detailId} />}
         </>
       ))}
     </Card>
+  );
+}
+
+function RunDetails({ runId }: { runId: number }) {
+  const detail = useApi<RunDetail>(`/simulation_runs/${runId}`);
+  return (
+    <section className="mt-3 border-t border-line pt-3" aria-label={`Details of run ${runId}`}>
+      <h3 className="m-0 text-[14px] font-bold text-ink">Run {runId}</h3>
+      {detail.error !== null && <ErrorState error={detail.error} onRetry={detail.reload} />}
+      {detail.error === null && !detail.data && <LoadingState />}
+      {detail.data && (
+        <>
+          <RunResult result={detail.data} showAlgorithm showLive={false} />
+          {detail.data.summary && detail.data.summary.total > 0 && (
+            <>
+              <EvacuationTimeline points={detail.data.timeline} />
+              <details className="mt-2">
+                <summary className="cursor-pointer text-[13px]">Show the timeline as a table</summary>
+                <DataTable caption={`Timeline of run ${runId}`}
+                  columns={["Time (s)", "Reached an exit", "Still moving", "Need assisted evacuation", "Reached by the hazard"]}
+                  rows={detail.data.timeline.map((f, i) => ({
+                    key: i, cells: [f.t, f.evacuated, f.active, f.needs_assistance, f.reached_by_hazard],
+                  }))} />
+              </details>
+            </>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

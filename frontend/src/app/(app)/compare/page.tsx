@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 
+import { MeasureBars } from "@/components/charts.tsx";
 import { FormError } from "@/components/facility-forms.tsx";
 import { RunResult } from "@/components/run-result.tsx";
 import { Card, DataTable, EmptyState, ErrorState, LoadingState, PageHeader, Tag } from "@/components/ui.tsx";
@@ -154,6 +155,14 @@ function Results({ rows, busy, onRun }: { rows: Comparison[]; busy: boolean; onR
   return (
     <Card>
       <h2 className="mt-0">Results</h2>
+      <div className="mb-3 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-[14px]">
+        <MeasureBars title="Evacuation time (s), everyone out only" unit="s"
+                     data={rows.map((r) => ({ label: algorithmLabel(r.algorithm), value: r.all_evacuated ? r.evacuation_time_s : null }))} />
+        <MeasureBars title="Mean walk (m)" unit="m"
+                     data={rows.map((r) => ({ label: algorithmLabel(r.algorithm), value: r.distance_m }))} />
+        <MeasureBars title="Mean risk exposure" unit=""
+                     data={rows.map((r) => ({ label: algorithmLabel(r.algorithm), value: r.risk }))} />
+      </div>
       <DataTable
         caption="Results per algorithm"
         columns={["Algorithm", "Everyone out?", "Evacuation time", "Mean walk (m)", "Mean risk exposure", "Need help", "Reached by hazard", "Best at", ""]}

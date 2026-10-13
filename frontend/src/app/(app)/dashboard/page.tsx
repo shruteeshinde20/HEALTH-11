@@ -8,11 +8,9 @@ import { useUser } from "@/lib/client/session.tsx";
 import { useApi } from "@/lib/client/use-api.ts";
 import type { Alerts, Dashboard, Page, RunSummary, ScenarioName } from "@/lib/shared/api-types.ts";
 import { algorithmLabel, formatSeconds } from "@/lib/shared/format.ts";
-import { APP_PAGES } from "@/lib/shared/pages.ts";
+import { pageFor } from "@/lib/shared/pages.ts";
 
 const RECENT_RUNS = 5;
-const scenarioBuilder = APP_PAGES.find((page) => page.href === "/scenarios");
-const reportsPage = APP_PAGES.find((page) => page.href === "/reports");
 
 function plural(count: number, one: string, many: string) {
   return count === 1 ? one : many;
@@ -24,6 +22,8 @@ export default function DashboardPage() {
   const runs = useApi<Page<RunSummary>>("/simulation_runs", { limit: RECENT_RUNS });
   const scenarios = useApi<Page<ScenarioName>>("/scenarios", { limit: 200 });
   const alerts = useApi<Alerts>("/alerts");
+  const scenarioBuilder = pageFor("/scenarios", user.role);
+  const reportsPage = pageFor("/reports", user.role);
 
   const scenarioName = (id: number) =>
     scenarios.data?.items.find((scenario) => scenario.id === id)?.name ?? `Scenario ${id}`;
@@ -87,8 +87,8 @@ export default function DashboardPage() {
               />
             ))}
           <p className="flex flex-wrap gap-2">
-            {scenarioBuilder?.ready && <Link className="btn" href={scenarioBuilder.href}>Run new simulation</Link>}
-            {reportsPage?.ready && <Link className="btn l" href={reportsPage.href}>All runs and reports</Link>}
+            {scenarioBuilder && <Link className="btn" href={scenarioBuilder.href}>Run new simulation</Link>}
+            {reportsPage && <Link className="btn l" href={reportsPage.href}>All runs and reports</Link>}
           </p>
         </Card>
 

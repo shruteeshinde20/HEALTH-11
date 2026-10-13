@@ -327,6 +327,10 @@ def test_live_simulation_requests(client):
     assert {n["name"] for n in run["map"]["nodes"]} == {"Ward A", "C1", "Exit 1"}
     assert {n["floor_id"] for n in run["map"]["nodes"]} == {ground["id"]}
     assert run["injected_hazards"] == []
+    # Reports & History draws the saved timeline (EvacuationTimeline) and shows it as a table.
+    assert len(run["timeline"]) >= 2 and run["timeline"][0]["t"] == 0
+    assert all({"t", "evacuated", "active", "needs_assistance", "reached_by_hazard"} <= set(f) for f in run["timeline"])
+    assert run["timeline"][-1]["evacuated"] == 3
 
     # /api/session/stream asks for a stream token with no body, then the browser opens the URL
     # (speed is one of STREAM_SPEEDS in frontend/src/lib/shared/live.ts).

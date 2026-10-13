@@ -8,9 +8,10 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { useSession } from "@/lib/client/session.tsx";
-import { SAFETY_NOTICE, visiblePages } from "@/lib/shared/pages.ts";
+import { HOME_PATH } from "@/lib/shared/navigation.ts";
+import { SAFETY_NOTICE, canOpen, visiblePages } from "@/lib/shared/pages.ts";
 
-import { ErrorState, LoadingState } from "./ui.tsx";
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader } from "./ui.tsx";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { state, logout, retry } = useSession();
@@ -60,7 +61,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main id="main" tabIndex={-1} className="w-full max-w-[1100px] flex-1 px-4 py-4 md:px-7 md:py-[22px]">
           {state.status === "loading" && <LoadingState label="Loading your session…" />}
           {state.status === "error" && <ErrorState error={state.error} onRetry={retry} />}
-          {state.status === "ready" && children}
+          {state.status === "ready" && (canOpen(pathname, role) ? children : (
+            <>
+              <PageHeader title="Not available" subtitle="This page is not part of your role." />
+              <Card>
+                <EmptyState>
+                  Your role ({state.user.role}) cannot use this page. An Administrator can change your role.{" "}
+                  <Link href={HOME_PATH}>Back to the Dashboard</Link>
+                </EmptyState>
+              </Card>
+            </>
+          ))}
         </main>
         <footer className="px-4 pb-4 md:px-7">
           <p className="note">{SAFETY_NOTICE}</p>
