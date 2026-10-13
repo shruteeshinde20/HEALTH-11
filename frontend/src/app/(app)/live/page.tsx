@@ -119,11 +119,13 @@ function LiveView({ run, floors, scenarioName, onRunChanged }: {
         <h2 className="mt-0">Controls</h2>
         <p className="sm my-1">{scenarioName} · {algorithmLabel(run.algorithm)}</p>
         <label htmlFor="live-speed">Speed</label>
-        <select id="live-speed" value={speed} disabled={live} onChange={(e) => setSpeed(Number(e.target.value))}>
-          {STREAM_SPEEDS.map((value) => (
-            <option key={value} value={value}>{value}× ({value} simulated {value === 1 ? "second" : "seconds"} per second)</option>
-          ))}
+        <select id="live-speed" value={speed} disabled={live} aria-describedby="live-speed-hint"
+                onChange={(e) => setSpeed(Number(e.target.value))}>
+          {STREAM_SPEEDS.map((value) => <option key={value} value={value}>{value}×</option>)}
         </select>
+        <p id="live-speed-hint" className="sm mt-1 mb-0">
+          {speed}× = {speed} simulated {speed === 1 ? "second" : "seconds"} per real second.
+        </p>
         <p className="flex flex-wrap gap-2">
           {!live && (
             <button type="button" className="btn" onClick={() => void stream.start(run.id, speed)}>
