@@ -26,7 +26,8 @@ TEXT = "Fire in ward a, severity 3, spreading about 2 metres per minute."
 def main() -> int:
     settings = get_settings()
     provider = settings.ai_provider
-    secret = {"gemini": settings.gemini_api_key, "anthropic": settings.anthropic_api_key}.get(provider)
+    secret = {"gemini": settings.gemini_api_key, "anthropic": settings.anthropic_api_key,
+              "groq": settings.groq_api_key}.get(provider)
     if secret and secret.get_secret_value().startswith("replace_with"):
         print(f"FAILED: {provider.upper()}_API_KEY in .env is still the placeholder")
         return 1
@@ -39,7 +40,7 @@ def main() -> int:
         print(f"Provider: ollama, model: {settings.ollama_model}, on {settings.ollama_url}  (runs on this "
               f"computer; no API key; answers can take a minute, limit {settings.ollama_timeout_seconds:g} s)")
     else:
-        name = settings.gemini_model if provider == "gemini" else settings.anthropic_model
+        name = {"gemini": settings.gemini_model, "groq": settings.groq_model}.get(provider, settings.anthropic_model)
         version = f", API version: {settings.gemini_api_version}" if provider == "gemini" else ""
         print(f"Provider: {provider}, model: {name}{version}  (API key loaded from .env, not shown)")
     notice = assistant.data_notice(settings)

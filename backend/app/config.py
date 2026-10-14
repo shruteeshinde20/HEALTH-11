@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # True while using Google's free API tier, where Google may use what is sent
     # to improve its products. Not allowed in production.
     gemini_free_tier: bool = True
+    # Groq: cloud service with an OpenAI-compatible API (https://console.groq.com).
+    groq_api_key: SecretStr | None = None
+    groq_model: str | None = None
     # Ollama: a model running on this computer (https://ollama.com). No key;
     # local models answer more slowly, so they get their own time limit.
     ollama_url: str = "http://127.0.0.1:11434"
@@ -117,8 +120,8 @@ class Settings(BaseSettings):
     @classmethod
     def validate_ai_provider(cls, value: str) -> str:
         value = value.strip().lower()
-        if value not in {"anthropic", "gemini", "ollama"}:
-            raise ValueError("AI_PROVIDER must be anthropic, gemini or ollama")
+        if value not in {"anthropic", "gemini", "groq", "ollama"}:
+            raise ValueError("AI_PROVIDER must be anthropic, gemini, groq or ollama")
         return value
 
     @field_validator("ollama_url")

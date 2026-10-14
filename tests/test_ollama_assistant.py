@@ -101,7 +101,7 @@ def test_settings_pick_ollama_and_explain_what_is_missing():
         assistant.configured_model(settings(ai_provider="ollama"))
     assert raised.value.status_code == 503 and "OLLAMA_MODEL" in str(raised.value)
     assert assistant.data_notice(settings(ai_provider="ollama", ollama_model="m")) is None   # nothing leaves the PC
-    with pytest.raises(ValueError, match="AI_PROVIDER must be anthropic, gemini or ollama"):
+    with pytest.raises(ValueError, match="AI_PROVIDER must be anthropic, gemini, groq or ollama"):
         settings(ai_provider="openai")
 
 

@@ -271,7 +271,7 @@ Priority parameters (defaults "assumed, to be validated"): weights
 `priority_weight_hazard` 0.3; mobility factors ambulatory 0, wheelchair 0.5,
 stretcher 0.8, ventilator 1.0; `priority_hazard_distance_m` 50.
 
-## AI assistant (Anthropic Claude, Google Gemini or a local model with Ollama)
+## AI assistant (Anthropic Claude, Google Gemini, Groq or a local model with Ollama)
 
 | Endpoint | What it does | Who |
 |---|---|---|
@@ -301,6 +301,7 @@ All the safety rules above are in HEALTH-11's own code, so they apply to every p
 |---|---|---|
 | `anthropic` (default) | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Paid API credits (separate from a Claude chat subscription) |
 | `gemini` | `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FREE_TIER`, `GEMINI_API_VERSION` (`v1` default, or `v1beta`) | Key from Google AI Studio. On the **free tier** Google may use what is sent to improve its products: every answer then carries a `data_notice`, use made-up data only, and the server refuses to start in production. Set `GEMINI_FREE_TIER=false` only for a paid (billing-enabled) key. |
+| `groq` | `GROQ_API_KEY`, `GROQ_MODEL` (for example `openai/gpt-oss-20b` or `openai/gpt-oss-120b`, production models on [Groq's model list](https://console.groq.com/docs/models)) | GroqCloud's OpenAI-compatible API with strict structured outputs. A daily limit that is used up is reported as such. |
 | `ollama` | `OLLAMA_MODEL`, `OLLAMA_URL` (default `http://127.0.0.1:11434`), `OLLAMA_TIMEOUT_SECONDS` (default 180) | Free model running on this computer with [Ollama](https://ollama.com): no key, no quota, nothing leaves the computer. Install Ollama, then `ollama pull <model>` (for example `llama3.2`). Slower than hosted services and small models make more mistakes; the checks above still apply. In production `OLLAMA_URL` must be on the same machine or use `https`. |
 
 Check the setup with one real request — the key is never printed, and on failure

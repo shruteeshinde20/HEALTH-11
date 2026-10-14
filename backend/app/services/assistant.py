@@ -496,6 +496,113 @@ class GeminiModel:
             raise AssistantError("The assistant gave an answer in an unexpected format") from exc
 
 
+# --- Groq adapter (OpenAI-compatible cloud API) ----------------------------------------------
+
+GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
+# Reasoning models (such as openai/gpt-oss-*) think before answering, and that
+# thinking counts towards the answer length, so they get room for it.
+GROQ_REASONING_ROOM = 4096
+
+
+class GroqModel:
+    """Calls GroqCloud (https://console.groq.com) through its OpenAI-compatible
+    chat completions endpoint with structured outputs: response_format
+    json_schema with strict=true (constrained decoding). Both schemas of this
+    module meet strict mode's rules: every field required and
+    additionalProperties false. Retries rate limits and server errors twice;
+    the key is never written to errors or logs. scripts/check_assistant.py
+    verifies the setup against the real service.
+    """
+
+    def __init__(self, api_key: str, model: str, timeout: float, max_retries: int = 2,
+                 transport=None, sleep=time.sleep):
+        import httpx
+
+        self._httpx = httpx
+        self._api_key = api_key
+        self._model = model
+        self._timeout = timeout
+        self._max_retries = max_retries
+        self._transport = transport
+        self._sleep = sleep
+
+    def _hide(self, text: str) -> str:
+        return text.replace(self._api_key, "[hidden]") if self._api_key else text
+
+    def _status_error(self, response) -> AssistantError:
+        code, message, kind = response.status_code, None, None
+        try:
+            error = response.json().get("error")
+        except (ValueError, AttributeError):
+            error = None
+        if isinstance(error, dict):
+            message, kind = error.get("message"), error.get("code") or error.get("type")
+        detail = self._hide(" | ".join(str(p)[:500] for p in (f"HTTP {code}", kind, message) if p))
+        text = str(message).lower()
+        if code in (401, 403):
+            return AssistantError("The AI service rejected the API key; check GROQ_API_KEY", 503, detail)
+        if code == 429 and ("per day" in text or "quota" in text):
+            return AssistantError(QUOTA_MESSAGE, 503, detail)
+        if code == 429:
+            return AssistantError("The AI service is busy; try again in a minute", 503, detail)
+        if code == 404:
+            return AssistantError("The AI model was not found; check GROQ_MODEL", 503, detail)
+        if code in PROVIDER_UNAVAILABLE_STATUSES:
+            return AssistantError(UNAVAILABLE_MESSAGE, 503, detail)
+        return AssistantError(f"The AI service returned an error ({code})", 502, detail)
+
+    def complete_json(self, system: str, user_content: str, schema: dict, max_tokens: int) -> dict:
+        httpx = self._httpx
+        body = {
+            "model": self._model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user_content}],
+            "response_format": {"type": "json_schema",
+                                "json_schema": {"name": "answer", "strict": True, "schema": schema}},
+            "max_completion_tokens": max_tokens + GROQ_REASONING_ROOM,
+        }
+        headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
+        last_error = None
+        with httpx.Client(timeout=self._timeout, transport=self._transport) as client:
+            for attempt in range(self._max_retries + 1):
+                try:
+                    response = client.post(GROQ_CHAT_URL, headers=headers, json=body)
+                except httpx.TimeoutException as exc:
+                    last_error = AssistantError("The AI service did not answer in time; try again", 503,
+                                                self._hide(type(exc).__name__))
+                except httpx.HTTPError as exc:
+                    last_error = AssistantError("The AI service could not be reached", 503,
+                                                self._hide(f"{type(exc).__name__}: {exc}"[:500]))
+                else:
+                    if response.status_code < 400:
+                        return self._parse(response)
+                    last_error = self._status_error(response)
+                    if response.status_code not in _RETRY_STATUSES or str(last_error) == QUOTA_MESSAGE:
+                        raise last_error
+                if attempt < self._max_retries:
+                    self._sleep(2 ** attempt)
+        raise last_error
+
+    def _parse(self, response) -> dict:
+        try:
+            data = response.json()
+            choice = data["choices"][0]
+            message = choice["message"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise AssistantError("The assistant gave an answer in an unexpected format") from exc
+        if choice.get("finish_reason") == "length":
+            raise AssistantError("The assistant could not complete an answer; try rephrasing",
+                                 detail="finish_reason length (answer longer than allowed)")
+        text = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(text, str):
+            raise AssistantError("The assistant could not complete an answer; try rephrasing",
+                                 detail=self._hide(f"no content | refusal {message.get('refusal')}"[:500])
+                                 if isinstance(message, dict) else None)
+        try:
+            return json.loads(text)
+        except ValueError as exc:
+            raise AssistantError("The assistant gave an answer in an unexpected format") from exc
+
+
 # --- Ollama adapter (a model running on this computer) ------------------------------------
 
 _THINKING = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL)
@@ -580,7 +687,7 @@ class OllamaModel:
 
 # --- Choosing the provider --------------------------------------------------------------------
 
-PROVIDERS = ("anthropic", "gemini", "ollama")
+PROVIDERS = ("anthropic", "gemini", "groq", "ollama")
 FREE_TIER_NOTICE = (
     "Free Gemini API tier: Google may use what is sent to improve its products. "
     "Use made-up data only; do not type patient names or other personal details."
@@ -597,6 +704,12 @@ def data_notice(settings) -> str | None:
 def configured_model(settings) -> LanguageModel:
     """The model chosen by AI_PROVIDER in .env. Raises AssistantError (503) with
     the setting to fix when something is missing; never includes the key."""
+    if settings.ai_provider == "groq":
+        key = settings.groq_api_key.get_secret_value() if settings.groq_api_key else ""
+        if not key or not settings.groq_model:
+            raise AssistantError("The AI assistant is not configured: set GROQ_API_KEY and "
+                                 "GROQ_MODEL in .env", 503)
+        return GroqModel(key, settings.groq_model, timeout=settings.assistant_timeout_seconds)
     if settings.ai_provider == "ollama":
         if not settings.ollama_model:
             raise AssistantError("The AI assistant is not configured: set OLLAMA_MODEL in .env "
