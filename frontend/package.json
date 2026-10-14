@@ -12,7 +12,8 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "node --test \"tests/unit/*.test.ts\""
+    "test": "node --test \"tests/unit/*.test.ts\"",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@xyflow/react": "12.12.0",

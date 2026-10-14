@@ -123,11 +123,49 @@ from the website's own pages. In production put nginx (or similar) in front and
 set `TRUST_PROXY_HEADERS=true` so the API's login rate limits see each
 visitor's real IP; leave it `false` otherwise.
 
-## 7. Continuous integration
+## 7. End-to-end tests (Playwright)
+
+A real browser (Chromium) uses the real website, API and PostgreSQL:
+sign-up, log out and in, Facility Manager and floor import (PROJECT.md's Test
+case), Graph Builder, patients and staff CSV import and export, Scenario
+Builder, Algorithm Comparison (it must show the Test case values: 48.5 m mean
+walk, everyone out after 100 s with C1 blocked), live replay, Reports with the
+timeline chart and a real PDF, the AI Assistant, an Administrator adding a
+Staff User who then sees only that role's pages, Settings, an automatic
+accessibility check (WCAG 2.1 A and AA, axe-core) of every page, and that no
+page breaks the Content-Security-Policy.
+
+The tests start their own servers (website 3100, API 8100, a fake AI 11500),
+so your normal ones on 3000 and 8000 can keep running. They use their own
+database, `health11_e2e`, which is **emptied and rebuilt on every run**; any
+other database is refused. No real AI is called.
+
+Once:
+
+```powershell
+docker exec health11-postgres createdb -U health11 health11_e2e
+cd frontend
+npx playwright install chromium
+```
+
+Each run (stop `npm start` first, the build replaces its files):
+
+```powershell
+cd frontend
+npm run build
+npm run e2e
+```
+
+The database address is taken from `TEST_DATABASE_URL` in `.env.test` with the
+name changed to `health11_e2e` (or set `E2E_DATABASE_URL`). After a failure,
+`npx playwright show-report` opens the report with screenshots and traces.
+
+## 8. Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request: Python 3.11,
 PostgreSQL 16, migrations up → down → up, a model/migration drift check
-(`alembic check`) and the full test suite.
+(`alembic check`), the full test suite, the website checks, and the
+end-to-end tests in Chromium.
 
 ## API overview (all under `/api/v1`, header `Authorization: Bearer <token>`)
 

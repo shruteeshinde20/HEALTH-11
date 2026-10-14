@@ -98,3 +98,67 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+  e2e:
+    name: End-to-end tests (Playwright, Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16.6
+        env:
+          POSTGRES_DB: health11_e2e
+          POSTGRES_USER: health11
+          # Throwaway password for the disposable CI database only.
+          POSTGRES_PASSWORD: ci_only_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U health11 -d health11_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_DATABASE_URL: postgresql+psycopg://health11:ci_only_password@127.0.0.1:5433/health11_e2e
+      E2E_PYTHON: python
+      JWT_SECRET_KEY: ci-only-jwt-secret-not-used-anywhere-else-0001
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pinned Python dependencies
+        run: pip install -r requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install exactly the locked packages
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install the Chromium browser for Playwright
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Production build of the website
+        working-directory: frontend
+        run: npm run build
+
+      - name: End-to-end tests
+        working-directory: frontend
+        run: npm run e2e
+
+      - name: Keep the report when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
