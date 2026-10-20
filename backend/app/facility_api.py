@@ -7,8 +7,8 @@ Reads: any signed-in user. Writes: Administrator or Emergency Commander.
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -50,11 +50,25 @@ FLOOR_CONFLICT = "This floor number already exists in this building"
 
 # --- Schemas ------------------------------------------------------------------------
 
+# Map position in decimal degrees (WGS 84), as map apps show it.
+Latitude = Annotated[float, Field(ge=-90, le=90, allow_inf_nan=False)]
+Longitude = Annotated[float, Field(ge=-180, le=180, allow_inf_nan=False)]
+LOCATION_PAIR = "Give both latitude and longitude, or neither"
+
+
 class HospitalCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: Name(200)
     address: OptionalText(500) = None
     timezone: TimeZoneName
+    latitude: Latitude | None = None
+    longitude: Longitude | None = None
+
+    @model_validator(mode="after")
+    def location_pair(self):
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError(LOCATION_PAIR)
+        return self
 
 
 class HospitalUpdate(BaseModel):
@@ -62,6 +76,9 @@ class HospitalUpdate(BaseModel):
     name: Name(200) | None = None
     address: OptionalText(500) = None
     timezone: TimeZoneName | None = None
+    # null clears the position (send both as null).
+    latitude: Latitude | None = None
+    longitude: Longitude | None = None
 
 
 class HospitalOut(BaseModel):
@@ -71,6 +88,8 @@ class HospitalOut(BaseModel):
     name: str
     address: str | None
     timezone: str
+    latitude: float | None
+    longitude: float | None
     created_at: datetime
     updated_at: datetime
 
@@ -169,6 +188,10 @@ def create_hospital(payload: HospitalCreate, db: Db, user: Editor, request: Requ
 def update_hospital(hospital_id: int, payload: HospitalUpdate, db: Db, user: Editor, request: Request):
     hospital = get_active(db, Hospital, hospital_id, user.organization_id, "Hospital")
     changes = changes_from(payload, not_null={"name", "timezone"})
+    latitude = changes.get("latitude", hospital.latitude)
+    longitude = changes.get("longitude", hospital.longitude)
+    if (latitude is None) != (longitude is None):
+        raise HTTPException(status_code=422, detail=LOCATION_PAIR)
     for field, value in changes.items():
         setattr(hospital, field, value)
     flush_or_conflict(db, HOSPITAL_CONFLICT)

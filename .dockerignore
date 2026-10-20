@@ -7,7 +7,7 @@
 !requirements.lock.txt
 !requirements-test.lock.txt
 !tests/
-# The demo seed is tested in the test image only (never in the production image).
+# Scripts tested in the test image only (never in the production image).
 !scripts/
 
 # Never in an image, even inside the folders above
@@ -19,6 +19,7 @@ backend/Dockerfile
 # Checks the project's files (Dockerfiles, compose, .gitignore), which are not
 # in the image; it runs on your PC and in CI instead.
 tests/test_deployment_files.py
-# Only the demo seed is needed from scripts/.
+# From scripts/, only the two scripts the backend tests check..
 scripts/*
 !scripts/seed_demo.py
+!scripts/reset_password.py

@@ -12,10 +12,11 @@ import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
-import { FRONTEND_DIR, WEB_URL } from "./support";
+import { FRONTEND_DIR, MAIL_URL, WEB_URL } from "./support";
 
 const ADMIN = { organization: "E2E Hospital Group", name: "E2E Admin", email: "admin@e2e.test", password: "E2e-Admin-Pass-2026!" };
 const STAFF = { name: "E2E Staff", email: "staff@e2e.test", password: "E2e-Staff-Pass-2026!" };
+const STAFF_NEW_PASSWORD = "E2e-Staff-Reset-2026!";
 const FLOOR_FILE = path.join(FRONTEND_DIR, "e2e", "fixtures", "test-case-floor.csv");
 
 const PATIENTS_CSV = "patient_code,mobility,criticality,test_data,hospital,building,floor_number,place\r\n"
@@ -260,6 +261,57 @@ test("Admin adds a Staff User, who sees only the pages of that role", async ({ b
   await staffContext.close();
 });
 
+test("Forgot password: the Staff User gets a code by e-mail and sets a new password", async ({ browser }) => {
+  const visitorContext = await newContext(browser);
+  const visitor = await visitorContext.newPage();
+  watch(visitor);
+  await visitor.goto("/login");
+  await visitor.getByRole("link", { name: "Forgot password?" }).click();
+  await expect(visitor).toHaveURL(/\/forgot-password$/);
+  await visitor.getByLabel("Organization ID").fill(organizationId);
+  await visitor.getByLabel("Email").fill(STAFF.email);
+  await visitor.getByRole("button", { name: "Send code" }).click();
+  await expect(visitor.getByRole("heading", { name: "Enter the code" })).toBeVisible();
+
+  // The e-mail reaches the test mail server (nothing leaves the computer).
+  let code = "";
+  await expect.poll(async () => {
+    const inbox = await (await fetch(`${MAIL_URL}/messages?to=${encodeURIComponent(STAFF.email)}`)).json() as { data: string }[];
+    code = /Your code: (\d{6})/.exec(inbox.at(-1)?.data ?? "")?.[1] ?? "";
+    return code;
+  }, { timeout: 15_000 }).toMatch(/^\d{6}$/);
+
+  await visitor.getByLabel("Code from the e-mail").fill(code);
+  await visitor.getByLabel("New password", { exact: true }).fill(STAFF_NEW_PASSWORD);
+  await visitor.getByLabel("New password again").fill(STAFF_NEW_PASSWORD);
+  await visitor.getByRole("button", { name: "Set new password" }).click();
+  await expect(visitor.getByRole("heading", { name: "Password changed" })).toBeVisible();
+
+  await login(visitor, STAFF.email, STAFF.password);
+  await expect(visitor.getByRole("alert").filter({ hasText: "Invalid organization, email, or password" })).toBeVisible();
+  await login(visitor, STAFF.email, STAFF_NEW_PASSWORD);
+  await expect(visitor).toHaveURL(/\/dashboard/);
+  await visitorContext.close();
+});
+
+test("Map position, then the weather at the hospital in the Scenario Builder (test weather server)", async () => {
+  await page.goto("/facilities");
+  await page.getByRole("button", { name: "Buildings & floors" }).first().click();
+  await page.getByRole("button", { name: "Edit hospital" }).click();
+  const edit = page.getByRole("dialog", { name: "Edit hospital" });
+  await edit.getByLabel(/^Latitude/).fill("18.5204, 73.8567");   // a pair pasted from a map app
+  await edit.getByRole("button", { name: "Save" }).click();
+  await expect(edit).toBeHidden();
+  await expect(page.getByText("18.52040° N, 73.85670° E")).toBeVisible();
+
+  await page.goto("/scenarios");
+  await page.getByRole("button", { name: "New scenario" }).click();
+  const note = page.getByRole("region", { name: "Weather at the hospital now" });
+  await expect(note).toContainText("Wind from NW at 13 km/h (gusts 22 km/h); smoke drifts toward SE.");
+  await expect(note).toContainText("Information only: the simulation does not use the weather.");
+  await expect(note.getByRole("link", { name: "Weather data by Open-Meteo.com (CC BY 4.0)" })).toBeVisible();
+});
+
 test("Settings: an Administrator changes their own name", async () => {
   await page.goto("/settings");
   await page.getByLabel("Full name").fill("E2E Administrator");
@@ -286,7 +338,7 @@ test("every page passes the automatic accessibility check (WCAG 2.1 A and AA)", 
   const visitorContext = await newContext(browser);
   const visitor = await visitorContext.newPage();
   watch(visitor);
-  for (const address of ["/", "/login", "/register"]) await check(visitor, address);
+  for (const address of ["/", "/login", "/register", "/forgot-password"]) await check(visitor, address);
   await visitorContext.close();
 
   expect(problems, problems.join("\n")).toEqual([]);

@@ -60,6 +60,30 @@ quality, roles, multi-tenant isolation).
   production stack. A restore asks for a typed confirmation and makes a safety
   backup first. The `backups` folder is git-ignored.
 
+## Forgot password by e-mail
+
+- The request answers the same whether or not the account exists, and the
+  e-mail is sent after the answer, so neither the text nor the timing tells who
+  has an account. Codes are 6 random digits (`secrets`), stored only as
+  HMAC-SHA256 with the server secret, valid 10 minutes, single use, 5 wrong
+  tries; a new code ends older ones. Requests are limited per account and per
+  network address, and confirmations per network address.
+- A reset ends every earlier login and clears the failed-login lockout; each
+  request, wrong code and reset is in the audit log. Addresses and codes are
+  never logged.
+- Mail goes over STARTTLS or SSL with certificate checks; production refuses
+  unencrypted SMTP to another computer. The SMTP password lives only in
+  `.env` / `.env.production`. Tests never send e-mail (fake sender; the
+  browser tests use a local fake mail server).
+
+## Outside data: weather
+
+- Only the hospital's position (rounded to 4 decimals) is sent to Open-Meteo,
+  no patient or hospital data. Values are read defensively and shown as text;
+  missing values stay missing. `OPEN_METEO_URL` must be https (http only on
+  this computer, for tests). Calls are cached per position and limited per
+  day; WEATHER_ENABLED switches it off.
+
 ## Demo data (step 18)
 
 - `scripts/seed_demo.py` loads made-up data through the API (same validation

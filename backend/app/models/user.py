@@ -2,10 +2,12 @@ from datetime import datetime
 import enum
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKeyConstraint,
     Index,
+    Integer,
     String,
     UniqueConstraint,
     false,
@@ -85,3 +87,30 @@ class RefreshToken(TenantMixin, TimestampMixin, Base):
     )
     # rotated (replaced by refresh), logout, sessions_ended (password change) or deactivated.
     revoked_reason: Mapped[str | None] = mapped_column(String(30), nullable=True)
+
+
+class PasswordResetCode(TenantMixin, TimestampMixin, Base):
+    """A "Forgot password?" code sent by e-mail.
+
+    Only a keyed hash (HMAC-SHA256 with the server secret) is stored, never
+    the code. A code is valid for a few minutes, allows a few wrong tries and
+    works once; asking for a new one ends the older ones.
+    """
+
+    __tablename__ = "password_reset_codes"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "user_id"],
+            ["users.organization_id", "users.id"],
+            name="fk_password_reset_codes_user", ondelete="CASCADE",
+        ),
+        Index("ix_password_reset_codes_org_user", "organization_id", "user_id"),
+        CheckConstraint("attempts >= 0", name="ck_password_reset_codes_attempts"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

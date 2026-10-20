@@ -59,8 +59,29 @@ export type Hospital = {
   name: string;
   address: string | null;
   timezone: string;
+  latitude: number | null;   // decimal degrees (WGS 84), both or neither
+  longitude: number | null;
   created_at: string;
   updated_at: string;
+};
+
+/** GET /hospitals/{id}/weather (Open-Meteo); every value may be missing. */
+export type WeatherNow = {
+  source: string;
+  attribution: string;
+  attribution_url: string;
+  note: string;
+  fetched_at: string;
+  valid_at: string;            // local time at the hospital, e.g. 2026-10-21T14:15
+  utc_offset_seconds: number;
+  interval_seconds: number | null;
+  temperature_c: number | null;
+  humidity_percent: number | null;
+  wind_speed_kmh: number | null;
+  wind_gusts_kmh: number | null;
+  wind_direction_deg: number | null;
+  wind_from: string | null;
+  smoke_drifts_toward: string | null;
 };
 
 export type Building = {

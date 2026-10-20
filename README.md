@@ -12,6 +12,7 @@ in [PROJECT.md](PROJECT.md).
 
 | Read this | For |
 |---|---|
+| [Project overview](docs/project-overview.md) | Features, where data comes from and is kept, what is AI, checks, limits and future scope |
 | [User guide](docs/user-guide.md) | What every page does, roles, the AI features, and a 10-minute demo |
 | [Architecture](docs/architecture.md) | How the parts fit together, the code map, the rules every part follows |
 | [Security review](docs/security-review.md) | Security measures, the accepted risk and open items |
@@ -348,6 +349,77 @@ It asks for a password for the DEMO Administrator, typed twice and never
 shown. Then it prints the **Organization ID** and email to log in with. The
 [user guide](docs/user-guide.md#a-10-minute-demo-with-the-demo-data) has a
 walkthrough.
+
+## 12. Forgotten password
+
+The website has no "forgot password" e-mail. An Administrator can set a new
+password for other users on the Admin page. If the only Administrator has
+forgotten theirs, whoever runs the server can set one directly in the
+database:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\reset_password.py --list
+.\.venv\Scripts\python.exe scripts\reset_password.py --organization <Organization ID> --email <e-mail>
+```
+
+`--list` shows each Organization ID with its accounts (e-mail and role only).
+The new password is asked twice and never shown. Earlier logins of that
+account end, its failed-login lockout is cleared, and the change goes into the
+organization's audit log. It uses the database that `.env` points at (the
+development setup); the production image does not contain this script.
+
+## 13. "Forgot password?" by e-mail
+
+The login page has a **Forgot password?** link. Someone enters their
+Organization ID and e-mail; if that account exists and is active, a 6-digit
+code is e-mailed. The page answers the same either way, so it cannot be used
+to find out who has an account. The code is valid for 10 minutes, works once
+and allows 5 wrong tries; asking again ends the older code. With the code and
+a new password, every earlier login of the account ends and the change is
+written to the audit log. Only a keyed hash of each code is stored. Requests
+are limited per account and per network address.
+
+E-mail is sent over SMTP, for free with a Gmail account. Use a **separate
+Gmail account made for the app**, not a personal one:
+
+1. Create the Gmail account (for example `yourhospital.health11@gmail.com`).
+2. In that Google account, turn on **2-step verification**.
+3. Create an **app password** (Google Account → Security → App passwords) and
+   copy the 16 letters.
+4. In `.env` (development) or `.env.production` (production) set:
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURITY=starttls
+SMTP_USERNAME=yourhospital.health11@gmail.com
+SMTP_PASSWORD=<the app password>
+SMTP_FROM=yourhospital.health11@gmail.com
+```
+
+5. Restart the API. Without `SMTP_HOST` the link still shows, and the page
+   says that reset by e-mail is not set up.
+
+The code goes to the account's e-mail address, so it only works for accounts
+with a real inbox. Otherwise an Administrator sets a new password on the
+Admin page, or the server operator uses `scripts/reset_password.py`
+(section 12). A free Gmail account sends to up to 500 recipients a day.
+SMS codes are not offered: in India every business SMS needs DLT registration
+and costs money.
+
+## 14. Outside data (optional)
+
+| Source | What it adds | Key | Settings |
+|---|---|---|---|
+| Open-Meteo (weather) | Scenario Builder → **Weather at the hospital now**: wind from / speed / gusts, where smoke drifts, temperature, humidity, time measured | none | `WEATHER_ENABLED`, `OPEN_METEO_URL`, `WEATHER_CACHE_MINUTES` (15), `WEATHER_REQUESTS_PER_DAY` (2000) |
+
+It needs the hospital's map position (Facility Manager → Edit hospital). The
+weather is shown with its source, licence ("Weather data by Open-Meteo.com",
+CC BY 4.0) and time, and is **information only: simulations do not use it**.
+Open-Meteo's free API is for **non-commercial use** (up to 10,000 calls a
+day); commercial use needs one of their paid plans
+([terms](https://open-meteo.com/en/terms)). Answers are kept for 15 minutes
+per position. Tests never call Open-Meteo (a fake server answers).
 
 ## API overview (all under `/api/v1`, header `Authorization: Bearer <token>`)
 

@@ -125,6 +125,17 @@
     opacity: 0.6;
     cursor: not-allowed;
   }
+  /* A button that looks like a link (an action inside a sentence). */
+  .link-button {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    color: var(--color-ink);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
   .note {
     background: var(--color-warn);
     border-radius: 8px;

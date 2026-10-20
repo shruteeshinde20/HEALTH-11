@@ -18,6 +18,7 @@ import { fieldErrors } from "@/lib/client/field-errors.ts";
 import { useUser } from "@/lib/client/session.tsx";
 import { useAction } from "@/lib/client/use-action.ts";
 import { useAll } from "@/lib/client/use-api.ts";
+import { WeatherNote } from "@/components/weather-note.tsx";
 import { useFacility, type Facility } from "@/lib/client/use-facility.ts";
 import type { HazardType, RunDetail, Scenario } from "@/lib/shared/api-types.ts";
 import { ALGORITHM_LABELS, formatDateTime } from "@/lib/shared/format.ts";
@@ -170,6 +171,7 @@ function RunOptions({ facility, algorithm, setAlgorithm, buildingId, setBuilding
         {facility.buildings.map((b) => <option key={b.id} value={b.id}>{facility.buildingLabel(b.id)}</option>)}
       </select>
       {elsewhere && <p className="sm mt-1 mb-0">Hazards in other buildings do not affect this run.</p>}
+      <WeatherNote hospitalId={facility.buildings.find((b) => b.id === buildingId)?.hospital_id} />
     </>
   );
 }

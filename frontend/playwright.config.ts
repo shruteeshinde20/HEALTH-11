@@ -4,7 +4,7 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { AI_URL, API_URL, PORTS, REPO_DIR, WEB_URL, e2eDatabaseUrl, environment, python } from "./e2e/support";
+import { AI_URL, API_URL, MAIL_URL, PORTS, WEATHER_URL, REPO_DIR, WEB_URL, e2eDatabaseUrl, environment, python } from "./e2e/support";
 
 const databaseUrl = e2eDatabaseUrl();     // refuses anything but /health11_e2e
 const py = `"${python()}"`;
@@ -17,7 +17,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   timeout: 90_000,
   expect: { timeout: 15_000 },
-  reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
+  // On GitHub, failures are also shown as notes on the run ("github" reporter).
+  reporter: [["list"], ...(process.env.CI ? [["github"] as ["github"]] : []),
+             ["html", { open: "never", outputFolder: "playwright-report" }]],
   outputDir: "test-results",
   use: {
     baseURL: WEB_URL,
@@ -36,6 +38,20 @@ export default defineConfig({
       env: environment({ E2E_AI_PORT: String(PORTS.ai) }),
     },
     {
+      // Stand-in mail server for "Forgot password?" codes: no real e-mail is sent.
+      command: "node e2e/fake-smtp.mjs",
+      url: `${MAIL_URL}/`,
+      reuseExistingServer: false,
+      env: environment({ E2E_SMTP_PORT: String(PORTS.smtp), E2E_MAIL_PORT: String(PORTS.mail) }),
+    },
+    {
+      // Stand-in for Open-Meteo (weather): no internet during tests.
+      command: "node e2e/fake-weather.mjs",
+      url: `${WEATHER_URL}/`,
+      reuseExistingServer: false,
+      env: environment({ E2E_WEATHER_PORT: String(PORTS.weather) }),
+    },
+    {
       // Empty the e2e database, build it again with the migrations, start the API.
       command: `${py} -m alembic downgrade base && ${py} -m alembic upgrade head && `
         + `${py} -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port ${PORTS.api}`,
@@ -50,6 +66,14 @@ export default defineConfig({
         OLLAMA_URL: AI_URL,
         OLLAMA_MODEL: "e2e-fake-model",
         CORS_ORIGINS: WEB_URL,
+        SMTP_HOST: "127.0.0.1",
+        SMTP_PORT: String(PORTS.smtp),
+        SMTP_SECURITY: "none",
+        SMTP_FROM: "health11@e2e.test",
+        SMTP_USERNAME: "",
+        SMTP_PASSWORD: "",
+        WEATHER_ENABLED: "true",
+        OPEN_METEO_URL: `${WEATHER_URL}/v1/forecast`,
       }),
     },
     {

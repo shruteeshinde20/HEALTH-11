@@ -14,6 +14,7 @@ import { describeError } from "@/lib/shared/errors.ts";
 import {
   FLOOR_CSV_COLUMNS, FLOOR_IMPORT_ACCEPT, MAX_FLOOR_FILE_BYTES, floorImportType,
 } from "@/lib/shared/files.ts";
+import { readLocation } from "@/lib/shared/location.ts";
 
 export function FormError({ error }: { error: unknown }) {
   if (error === null || Object.keys(fieldErrors(error)).length) return null;
@@ -69,12 +70,24 @@ export function HospitalForm({ hospital, onSaved, onCancel, submitLabel }: {
   const [name, setName] = useState(hospital?.name ?? "");
   const [address, setAddress] = useState(hospital?.address ?? "");
   const [timezone, setTimezone] = useState(hospital?.timezone ?? browserTimeZone());
+  const [latitude, setLatitude] = useState(hospital?.latitude == null ? "" : String(hospital.latitude));
+  const [longitude, setLongitude] = useState(hospital?.longitude == null ? "" : String(hospital.longitude));
+  const [locationError, setLocationError] = useState<{ field: "latitude" | "longitude"; message: string } | null>(null);
   const { busy, error, run } = useAction();
   const fields = fieldErrors(error);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const body = { name: name.trim(), address: optional(address), timezone };
+    const location = readLocation(latitude, longitude);
+    if (!location.ok) {
+      setLocationError({ field: location.field, message: location.message });
+      return;
+    }
+    setLocationError(null);
+    const body = {
+      name: name.trim(), address: optional(address), timezone,
+      latitude: location.latitude, longitude: location.longitude,
+    };
     const saved = await run(() => hospital
       ? apiRequest<Hospital>(`/hospitals/${hospital.id}`, { method: "PATCH", body })
       : apiRequest<Hospital>("/hospitals", { method: "POST", body }));
@@ -98,6 +111,25 @@ export function HospitalForm({ hospital, onSaved, onCancel, submitLabel }: {
           {timeZones().map((zone) => <option key={zone} value={zone}>{zone}</option>)}
         </select>
       </Field>
+      <fieldset className="mt-3">
+        <legend className="font-bold">Map position (optional)</legend>
+        <p id="hospital-location-hint" className="sm mt-1 mb-2">
+          Decimal degrees. In a map app, right-click the hospital and copy its position; you can paste both
+          numbers into Latitude. Needed for outside data such as weather and official alerts.
+        </p>
+        <Field id="hospital-latitude" label="Latitude (−90 to 90)"
+               error={locationError?.field === "latitude" ? locationError.message : fields.latitude}>
+          <input id="hospital-latitude" inputMode="decimal" autoComplete="off" value={latitude}
+                 onChange={(e) => setLatitude(e.target.value)} aria-describedby="hospital-location-hint"
+                 aria-invalid={locationError?.field === "latitude" || Boolean(fields.latitude)} />
+        </Field>
+        <Field id="hospital-longitude" label="Longitude (−180 to 180)"
+               error={locationError?.field === "longitude" ? locationError.message : fields.longitude}>
+          <input id="hospital-longitude" inputMode="decimal" autoComplete="off" value={longitude}
+                 onChange={(e) => setLongitude(e.target.value)} aria-describedby="hospital-location-hint"
+                 aria-invalid={locationError?.field === "longitude" || Boolean(fields.longitude)} />
+        </Field>
+      </fieldset>
       <FormError error={error} />
       <Buttons busy={busy} disabled={!name.trim()} label={submitLabel ?? (hospital ? "Save" : "Add hospital")} onCancel={onCancel} />
     </form>

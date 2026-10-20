@@ -16,11 +16,16 @@ export const PORTS = {
   web: Number(process.env.E2E_WEB_PORT ?? 3100),
   api: Number(process.env.E2E_API_PORT ?? 8100),
   ai: Number(process.env.E2E_AI_PORT ?? 11500),
+  smtp: Number(process.env.E2E_SMTP_PORT ?? 11525),
+  mail: Number(process.env.E2E_MAIL_PORT ?? 11526),   // the fake mail server's inbox (HTTP)
+  weather: Number(process.env.E2E_WEATHER_PORT ?? 11528),   // the fake Open-Meteo
 };
 // localhost (not 127.0.0.1): browsers keep Secure cookies on http://localhost.
 export const WEB_URL = `http://localhost:${PORTS.web}`;
 export const API_URL = `http://127.0.0.1:${PORTS.api}`;
 export const AI_URL = `http://127.0.0.1:${PORTS.ai}`;
+export const MAIL_URL = `http://127.0.0.1:${PORTS.mail}`;
+export const WEATHER_URL = `http://127.0.0.1:${PORTS.weather}`;
 
 const E2E_DATABASE = "health11_e2e";
 

@@ -69,6 +69,32 @@ class Settings(BaseSettings):
     report_max_requests_per_user: int = 30
     report_window_seconds: int = 600
 
+    # E-mail (SMTP) for "Forgot password?" codes. Not set = that option is off.
+    # Gmail: smtp.gmail.com, port 587, starttls, the Gmail address as username
+    # and FROM, and an app password (2-step verification must be on).
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_security: str = "starttls"          # starttls, ssl or none (none: only on this computer)
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from: str | None = None
+    smtp_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    # Reset codes: minutes valid, wrong tries allowed, and how often they may be asked for.
+    password_reset_code_minutes: int = Field(default=10, ge=5, le=60)
+    password_reset_max_attempts: int = Field(default=5, ge=1, le=10)
+    password_reset_requests_per_account: int = Field(default=3, ge=1, le=20)
+    password_reset_requests_per_ip: int = Field(default=10, ge=1, le=100)
+    password_reset_window_seconds: int = Field(default=3600, ge=60, le=86400)
+
+    # Outside data: current weather from Open-Meteo (free, no key, for
+    # non-commercial use; commercial use needs their paid plan). Shown as
+    # information only; simulations do not use it.
+    weather_enabled: bool = True
+    open_meteo_url: str = "https://api.open-meteo.com/v1/forecast"
+    weather_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    weather_cache_minutes: int = Field(default=15, ge=1, le=120)
+    weather_requests_per_day: int = Field(default=2000, ge=1, le=10000)
+
     # Rate limits (stored in PostgreSQL, so they hold across server workers).
     rate_limit_window_seconds: int = 900
     login_max_attempts_per_ip: int = 30
@@ -137,6 +163,40 @@ class Settings(BaseSettings):
     def ollama_is_local(self) -> bool:
         return urlparse(self.ollama_url).hostname in {"127.0.0.1", "localhost", "::1"}
 
+    @field_validator("open_meteo_url")
+    @classmethod
+    def validate_open_meteo_url(cls, value: str) -> str:
+        value = value.strip()
+        parsed = urlparse(value)
+        local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+        if parsed.scheme not in {"https", "http"} or not parsed.hostname or (parsed.scheme == "http" and not local):
+            raise ValueError("OPEN_METEO_URL must be an https:// address (http:// only on this computer)")
+        return value
+
+    @field_validator("smtp_security")
+    @classmethod
+    def validate_smtp_security(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"starttls", "ssl", "none"}:
+            raise ValueError("SMTP_SECURITY must be starttls, ssl or none")
+        return value
+
+    @field_validator("smtp_host", "smtp_username", "smtp_from", mode="before")
+    @classmethod
+    def blank_is_unset(cls, value):
+        # An empty SMTP_HOST= line in .env means "not set".
+        if value is None or str(value).strip() == "":
+            return None
+        return str(value).strip()
+
+    @property
+    def email_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from)
+
+    @property
+    def smtp_is_local(self) -> bool:
+        return self.smtp_host in {"127.0.0.1", "localhost", "::1"}
+
     @field_validator("gemini_api_version")
     @classmethod
     def validate_gemini_api_version(cls, value: str) -> str:
@@ -182,6 +242,11 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "OLLAMA_URL must be on this computer (127.0.0.1) or use https in production, "
                     "so the assistant's data never travels unencrypted"
+                )
+            if self.email_configured and self.smtp_security == "none" and not self.smtp_is_local:
+                raise ValueError(
+                    "SMTP_SECURITY=none is only allowed for a test inbox on this computer; "
+                    "use starttls or ssl in production so reset codes travel encrypted"
                 )
             if self.ai_provider == "gemini" and self.gemini_free_tier:
                 raise ValueError(

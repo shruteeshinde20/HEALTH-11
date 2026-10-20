@@ -52,6 +52,9 @@ becomes its Administrator.
 The public pages. Login needs the **Organization ID**, your email and your
 password. After 5 wrong passwords for one account, logins to it are paused
 for a while; sign-up and login are also limited per network address.
+**Forgot password?** e-mails a 6-digit code (valid 10 minutes, works once) to
+the account's address; enter it with a new password. This needs e-mail to be
+set up on the server (README section 13) and a real inbox for the account.
 
 ### Dashboard
 Where your hospital stands right now: number of hospitals, active scenarios,
@@ -61,7 +64,14 @@ not fully set up, a **Get started** card leads back to the onboarding wizard.
 
 ### Facility Manager
 Hospitals, their buildings and their floors: add, edit and delete them. A
-hospital has an address and a time zone (used for the times shown in reports).
+hospital has an address, a time zone (used for the times shown in reports) and
+an optional **map position** (latitude and longitude in decimal degrees; in a map
+app, right-click the hospital and copy its position, then paste both numbers
+into Latitude). The position is needed for outside data such as weather and
+official alerts. With a position, the Scenario Builder shows the **weather at
+the hospital now** (from Open-Meteo): wind direction and speed, where smoke
+would drift, temperature and humidity, with the time measured. It is
+information only; the simulation does not use it.
 **Import CSV / GeoJSON** adds the places and paths of a floor file to one of
 your floors (nothing already on the floor is changed); it is available once a
 floor exists. Each floor has **Export** links (JSON, GeoJSON, CSV). **Open map**
