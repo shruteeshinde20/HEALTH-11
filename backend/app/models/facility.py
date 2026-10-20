@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKeyConstraint, Index, String, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, Float, ForeignKeyConstraint, Index, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, TenantMixin, TimestampMixin
@@ -16,12 +16,22 @@ class Hospital(TenantMixin, TimestampMixin, Base):
             "uq_hospital_org_name", "organization_id", "name",
             unique=True, postgresql_where=ACTIVE,
         ),
+        # Map position in decimal degrees (WGS 84), both or neither.
+        CheckConstraint("latitude IS NULL OR (latitude >= -90 AND latitude <= 90)",
+                        name="ck_hospital_latitude_range"),
+        CheckConstraint("longitude IS NULL OR (longitude >= -180 AND longitude <= 180)",
+                        name="ck_hospital_longitude_range"),
+        CheckConstraint("(latitude IS NULL) = (longitude IS NULL)", name="ck_hospital_location_pair"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     address: Mapped[str | None] = mapped_column(String(500))
     timezone: Mapped[str] = mapped_column(String(100), default="UTC", server_default="UTC", nullable=False)
+    # Where the hospital is (decimal degrees, WGS 84). Optional; the outside
+    # data sources (map, weather, official alerts) need it.
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     buildings: Mapped[list["Building"]] = relationship(
         primaryjoin="and_(Hospital.id == foreign(Building.hospital_id), "

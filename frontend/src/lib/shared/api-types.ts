@@ -59,6 +59,8 @@ export type Hospital = {
   name: string;
   address: string | null;
   timezone: string;
+  latitude: number | null;   // decimal degrees (WGS 84), both or neither
+  longitude: number | null;
   created_at: string;
   updated_at: string;
 };

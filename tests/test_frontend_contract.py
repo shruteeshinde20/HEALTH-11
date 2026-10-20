@@ -48,11 +48,14 @@ def call(client, auth, method, path, expect, **kwargs):
 
 def test_facility_manager_requests(client):
     h = admin(client)
-    # HospitalForm: optional address sent as null, time zone from the browser list.
+    # HospitalForm: optional address and map position sent as null, time zone
+    # from the browser list; the position is sent as two numbers or two nulls.
     hospital = call(client, h, "POST", "/hospitals", 201,
-                    json={"name": "General", "address": None, "timezone": "Asia/Kolkata"}).json()
+                    json={"name": "General", "address": None, "timezone": "Asia/Kolkata",
+                          "latitude": None, "longitude": None}).json()
     call(client, h, "PATCH", f"/hospitals/{hospital['id']}", 200,
-         json={"name": "General", "address": "1 Main Road", "timezone": "Asia/Kolkata"})
+         json={"name": "General", "address": "1 Main Road", "timezone": "Asia/Kolkata",
+               "latitude": 18.5204, "longitude": 73.8567})
     # BuildingForm and FloorForm (elevation optional -> null).
     building = call(client, h, "POST", "/buildings", 201,
                     json={"hospital_id": hospital["id"], "name": "Main", "description": None}).json()
@@ -94,7 +97,8 @@ def test_facility_manager_requests(client):
 def test_onboarding_wizard_requests(client):
     h = admin(client)
     hospital = call(client, h, "POST", "/hospitals", 201,
-                    json={"name": "Wizard Hospital", "address": None, "timezone": "UTC"}).json()
+                    json={"name": "Wizard Hospital", "address": None, "timezone": "UTC",
+                          "latitude": None, "longitude": None}).json()
     building = call(client, h, "POST", "/buildings", 201,
                     json={"hospital_id": hospital["id"], "name": "Block A", "description": None}).json()
     floor = call(client, h, "POST", "/floors", 201, json={

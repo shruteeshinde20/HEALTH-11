@@ -15,6 +15,7 @@ import { Card, DataTable, EmptyState, ErrorState, LoadingState, PageHeader } fro
 import { useUser } from "@/lib/client/session.tsx";
 import { useAll } from "@/lib/client/use-api.ts";
 import type { Building, Floor, Hospital } from "@/lib/shared/api-types.ts";
+import { formatLocation } from "@/lib/shared/location.ts";
 import { APP_PAGES } from "@/lib/shared/pages.ts";
 
 const graphBuilder = APP_PAGES.find((page) => page.href === "/graph");
@@ -133,7 +134,10 @@ function FacilityManager() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="m-0">{selected.name}</h2>
-              <p className="sm my-1">{selected.address ?? "No address"} · Time zone {selected.timezone}</p>
+              <p className="sm my-1">
+                {selected.address ?? "No address"} · Time zone {selected.timezone}
+                {" · "}{formatLocation(selected.latitude, selected.longitude) || "No map position"}
+              </p>
             </div>
             {canEdit && (
               <div className="flex flex-wrap gap-2">
