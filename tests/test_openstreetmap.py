@@ -143,7 +143,7 @@ def test_the_radius_is_limited(client, overpass, radius):
 
 
 @pytest.mark.parametrize("reply, words", [
-    ((429, {}), "busy"), ((502, {}), "busy"), ((503, {}), "busy"), ((504, {}), "busy"),
+    ((406, {}), "busy"), ((429, {}), "busy"), ((502, {}), "busy"), ((503, {}), "busy"), ((504, {}), "busy"),
     ((500, {}), "error (500)"),
     ((200, ["not", "an", "object"]), None),
     ((200, httpx.ConnectError("down")), "could not be reached"),

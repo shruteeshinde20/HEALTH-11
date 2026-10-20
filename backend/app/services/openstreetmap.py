@@ -26,7 +26,9 @@ class OsmError(Exception):
         self.try_next = try_next   # busy or down: another server may answer
 
 
-BUSY_STATUSES = frozenset({429, 502, 503, 504})
+# 406 and 429 are how the public servers turn requests away when overloaded
+# (the OSM wiki: pause after 429 or 406); 502, 503 and 504 mean busy or down.
+BUSY_STATUSES = frozenset({406, 429, 502, 503, 504})
 
 
 @dataclass(frozen=True)
