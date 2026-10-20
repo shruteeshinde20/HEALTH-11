@@ -17,7 +17,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   timeout: 90_000,
   expect: { timeout: 15_000 },
-  reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
+  // On GitHub, failures are also shown as notes on the run ("github" reporter).
+  reporter: [["list"], ...(process.env.CI ? [["github"] as ["github"]] : []),
+             ["html", { open: "never", outputFolder: "playwright-report" }]],
   outputDir: "test-results",
   use: {
     baseURL: WEB_URL,
