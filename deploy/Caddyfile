@@ -1,0 +1,37 @@
+# Caddy: the only part of HEALTH-11 that browsers reach. It provides HTTPS and
+# passes requests on inside Docker's private network:
+#   - live simulation streams (WebSocket, /api/v1/ws/...) go to the API;
+#   - everything else goes to the website, whose server talks to the API.
+# The API's other endpoints and the database are not reachable from outside.
+#
+# SITE_HOST and CADDY_TLS come from .env.production (see compose.production.yml):
+#   on your own PC:  SITE_HOST=localhost and CADDY_TLS=internal
+#     (Caddy makes its own certificate; trust it once, see README section 9)
+#   on a server:     SITE_HOST=evac.example.org and CADDY_TLS=you@example.org
+#     (Caddy gets a free Let's Encrypt certificate and renews it)
+
+{
+	# The certificate authority stays inside this container; README section 9
+	# shows how to trust it on your PC yourself.
+	skip_install_trust
+	servers {
+		# HTTP/1.1 and HTTP/2 only (no HTTP/3: only TCP port 443 is published).
+		protocols h1 h2
+	}
+}
+
+{$SITE_HOST} {
+	tls {$CADDY_TLS}
+
+	# Do not say which server software this is.
+	header -Server
+
+	@stream path /api/v1/ws/*
+	handle @stream {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -64,7 +64,8 @@ Remove-Item Env:DATABASE_URL
 - API docs: http://127.0.0.1:8000/docs (all endpoints are under `/api/v1`)
 
 Behind a reverse proxy in production, start uvicorn with `--proxy-headers`
-so rate limits and the audit log see the real client IP.
+so rate limits and the audit log see the real client IP. The production setup
+in section 9 does this for you.
 
 ## 5. Run the tests
 
@@ -119,9 +120,10 @@ How sessions work: the browser only talks to the website. The website's own
 server logs in at the API and keeps the tokens in httpOnly, SameSite=Strict
 cookies that page scripts cannot read (`__Host-` cookies over HTTPS in
 production); it renews them automatically. Requests that change data must come
-from the website's own pages. In production put nginx (or similar) in front and
+from the website's own pages. In production, put a reverse proxy in front and
 set `TRUST_PROXY_HEADERS=true` so the API's login rate limits see each
-visitor's real IP; leave it `false` otherwise.
+visitor's real IP. Section 9 uses Caddy and sets it for you. Leave it `false`
+otherwise.
 
 ## 7. End-to-end tests (Playwright)
 
@@ -162,10 +164,146 @@ name changed to `health11_e2e` (or set `E2E_DATABASE_URL`). After a failure,
 
 ## 8. Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request: Python 3.11,
-PostgreSQL 16, migrations up → down → up, a model/migration drift check
-(`alembic check`), the full test suite, the website checks, and the
-end-to-end tests in Chromium.
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+- Python 3.11 with exactly the locked packages, and PostgreSQL 16.
+- Migrations up → down → up, and a model/migration drift check (`alembic check`).
+- The full test suite and the website checks.
+- The end-to-end tests in Chromium.
+- A build of the production images, a check of the Caddy configuration, and a
+  check that the compose file refuses empty secrets.
+
+## 9. Run in production (Docker, HTTPS)
+
+Everything runs in Docker from `compose.production.yml`: PostgreSQL, the API,
+the website and [Caddy](https://caddyserver.com), which gives the site HTTPS.
+Browsers reach only Caddy. It sends live simulation streams (`/api/v1/ws/...`)
+to the API and everything else to the website. The database and the API have
+no open ports. This is a separate Docker project (`health11-prod`) with its own
+database. Your development database and `docker-compose.yml` are not touched.
+
+| Part | Image | Notes |
+|---|---|---|
+| API | `backend/Dockerfile` on `python:3.11.9-slim-bookworm` | Exactly `requirements.lock.txt`, checked with `pip check`. Runs as an ordinary user and applies the migrations on start. |
+| Website | `frontend/Dockerfile` on `node:24.20.0-bookworm-slim` | `npm ci` and `npm run build`; ships only the standalone server, run as the `node` user. |
+| HTTPS | `caddy:2.11.7` | `deploy/Caddyfile`. |
+| Database | `postgres:16.6` | Volume `postgres_data`. |
+
+The base images are pinned by digest, so a rebuild starts from the same files.
+
+**Python lock files.** `requirements.txt` lists what the project uses (it is what
+you install on Windows). `requirements.lock.txt` lists every package, including
+the packages those packages need, with exact versions for Linux.
+`requirements-test.lock.txt` adds pytest. The Docker image and CI install the
+lock files. `tests/test_deployment_files.py` checks that both lists agree.
+
+### First start on your PC (https://localhost)
+
+Ports 80 and 443 must be free, and Docker Desktop must be running.
+
+```powershell
+Copy-Item .env.production.example .env.production
+notepad .env.production
+```
+
+Fill in `POSTGRES_PASSWORD` and `JWT_SECRET_KEY` with **new** random values, not
+the development ones. Docker refuses to start while they are empty. Generate
+each value with:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Put your AI key in `GROQ_API_KEY` too, or choose another `AI_PROVIDER`. The
+free Gemini tier is refused in production. Ollama on the same PC cannot be
+reached from inside Docker.
+
+Build and start (the first build takes several minutes):
+
+```powershell
+docker compose -f compose.production.yml --env-file .env.production up -d --build
+docker compose -f compose.production.yml --env-file .env.production ps
+```
+
+Wait until `postgres`, `backend` and `web` show `healthy`, then open
+https://localhost.
+
+**Trust the certificate (once).** Caddy makes its own certificate for
+localhost, so browsers warn until you trust Caddy's local certificate
+authority. The authority stays in the `caddy_data` volume and is used for
+nothing else. Windows asks you to confirm the import.
+
+```powershell
+docker compose -f compose.production.yml --env-file .env.production cp caddy:/data/caddy/pki/authorities/local/root.crt .\caddy-local-root.crt
+Import-Certificate -FilePath .\caddy-local-root.crt -CertStoreLocation Cert:\CurrentUser\Root
+```
+
+Then restart the browser. Chrome and Edge use the Windows certificate store;
+Firefox has its own. To remove the trust later:
+
+```powershell
+Get-ChildItem Cert:\CurrentUser\Root | Where-Object Subject -like '*Caddy Local Authority*' | Remove-Item
+```
+
+**Everyday commands** (from the project folder):
+
+```powershell
+docker compose -f compose.production.yml --env-file .env.production logs -f backend   # Ctrl+C to stop watching
+docker compose -f compose.production.yml --env-file .env.production stop               # stop, data is kept
+docker compose -f compose.production.yml --env-file .env.production up -d --build       # start again or after an update
+```
+
+Do not add `-v` to `down`: it deletes the volumes, and with them the database.
+
+**Prove the locked Linux packages pass every backend test.** The test image is
+the API image plus pytest and `tests/`. It runs against `health11_test` (the
+same database as section 5, reached through `host.docker.internal`), never the
+production or development database.
+
+```powershell
+docker build -f backend/Dockerfile --target test -t health11-backend-test .
+$url = ((Get-Content .env.test | Select-String '^\s*TEST_DATABASE_URL\s*=').Line -split '=', 2)[1].Trim().Trim('"').Trim("'") -replace '@127\.0\.0\.1:', '@host.docker.internal:'
+docker run --rm -e "TEST_DATABASE_URL=$url" -e "DATABASE_URL=$url" health11-backend-test
+Remove-Variable url
+```
+
+`tests/test_deployment_files.py` is not in that image, because it checks the
+Dockerfiles and compose file. It runs with the normal test suite (section 5)
+and in CI.
+
+### Later, on a server
+
+The same files work. In `.env.production` set `SITE_HOST` to the server's
+domain name, `CADDY_TLS` to your e-mail address (Caddy then gets a free Let's
+Encrypt certificate and renews it) and `PUBLISH_IP=0.0.0.0`. The domain must
+point at the server, and ports 80 and 443 must be open.
+
+## 10. Backup and restore (production database)
+
+```powershell
+.\scripts\backup.ps1                          # backups\health11-<date>-<time>.dump
+.\scripts\backup.ps1 -Label before-update     # backups\health11-<date>-<time>-before-update.dump
+```
+
+The backup is checked with `pg_restore --list` before the script reports
+success. Backups hold all hospital data, so keep them private. The `backups`
+folder is ignored by git. Copy backups to another disk now and then. Trained
+AI models are not in the backup; train them again on the AI page after a
+restore on a new PC.
+
+To restore, the production stack must be running:
+
+```powershell
+.\scripts\restore.ps1 -BackupFile backups\health11-20261020-101500.dump
+```
+
+It asks you to type `RESTORE`. It then makes a safety backup of the current
+data (`...-before-restore.dump`) and stops the website and the API. It empties
+the database, loads the backup (stopping at the first error) and starts both
+again. The API brings an older backup up to date with the migrations. If
+loading fails, the message gives the command to put the safety backup back.
+Both scripts work only with `compose.production.yml`, never with the
+development database.
 
 ## API overview (all under `/api/v1`, header `Authorization: Bearer <token>`)
 

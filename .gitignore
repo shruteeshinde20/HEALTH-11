@@ -12,3 +12,9 @@ dist/
 build/
 # Trained ML model files (generated at runtime, per organization)
 var/
+
+!.env.production.example
+# Database backups (scripts/backup.ps1): private data, never committed
+backups/
+# Caddy's local certificate, copied out to trust it (README section 9)
+caddy-local-root.crt

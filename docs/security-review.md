@@ -34,12 +34,41 @@ quality, roles, multi-tenant isolation).
 - Secrets only in `.env`; production refuses the development JWT secret, short secrets, the placeholder database password and the free Gemini tier.
 - AI answers: the user's text is data, never instructions; only stored figures may appear in summaries; nothing runs without "Run it".
 
+## Deployment (step 17)
+
+- Python packages: `requirements.lock.txt` pins every package, including the
+  packages they need. The image installs it with `--no-deps --only-binary=:all:`
+  and `pip check`, so nothing unpinned or compiled at build time gets in. A test
+  keeps it in line with `requirements.txt`.
+- Images: the base images are pinned by digest. The API and the website run as
+  ordinary users, without Linux capabilities (`cap_drop: ALL`) and with
+  `no-new-privileges`. `.dockerignore` files keep `.env` files, `node_modules`
+  and backups out of images.
+- Network: only Caddy publishes ports, on 127.0.0.1 by default. It sends
+  `/api/v1/ws/*` (live streams, which need a run token) to the API and
+  everything else to the website. The API's other endpoints and PostgreSQL are
+  reachable only inside Docker's private network.
+- Visitor IPs: Caddy replaces any X-Forwarded-For sent by a browser. The website
+  trusts it (`TRUST_PROXY_HEADERS=true`). The API accepts it only from the fixed
+  addresses of Caddy and the website (`FORWARDED_ALLOW_IPS`).
+- Secrets: `.env.production` is git-ignored. Docker refuses to start while
+  `POSTGRES_PASSWORD` or `JWT_SECRET_KEY` is empty, so the database is never
+  created with a missing password. The API's own production checks still apply
+  (secret length, no free Gemini tier).
+- Backups: `scripts/backup.ps1` and `scripts/restore.ps1` use only the
+  production stack. A restore asks for a typed confirmation and makes a safety
+  backup first. The `backups` folder is git-ignored.
+
+## Accepted risk
+
+| Item | Decision |
+|---|---|
+| `npm audit` reports GHSA-vfj7-8cjw-p6xm (`braces`, high) through `eslint-config-next` → `fast-glob` → `micromatch`. | Development tooling only (lint). It is not in the website's server or in the Docker image. `npm audit --omit=dev` reports 0 vulnerabilities, and CI checks that. No fixed version exists yet. `npm audit fix --force` would install an incompatible lint configuration. Check again when `eslint-config-next` is updated. |
+
 ## Still open (with the step that handles it)
 
 | Item | Where |
 |---|---|
-| Python dependencies of dependencies are not pinned (no lock file). | Step 17, deployment preparation. |
-| Pages are checked for accessibility and CSP violations in a real browser. | Step 16, Playwright tests. |
-| HTTPS, reverse proxy, backups and restore. | Step 17. |
 | Optional context imports (OpenStreetMap, NASA FIRMS, Open-Meteo, data.gov.in, NDMA), listed as optional in PROJECT.md "Data policy". | Not started; needs your decision (some need API keys). |
 | Audit log rows still carry `updated_at` / `deleted_at` columns (unused; audit rows are never changed or deleted by the app). | Left as is; removing columns is not worth a risky migration. |
+| The `postgres:16.6` image is pinned by version, not by digest (shared with the development setup). | Pinned by digest once its digest has been read on your PC. |

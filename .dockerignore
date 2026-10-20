@@ -1,0 +1,19 @@
+# Build context of backend/Dockerfile (the project folder). Only what the API
+# image needs is sent to Docker; above all, never .env files, keys or backups.
+*
+!alembic.ini
+!alembic/
+!backend/
+!requirements.lock.txt
+!requirements-test.lock.txt
+!tests/
+
+# Never in an image, even inside the folders above
+**/__pycache__/
+**/*.py[cod]
+**/.env
+**/.env.*
+backend/Dockerfile
+# Checks the project's files (Dockerfiles, compose, .gitignore), which are not
+# in the image; it runs on your PC and in CI instead.
+tests/test_deployment_files.py

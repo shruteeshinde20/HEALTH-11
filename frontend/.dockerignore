@@ -1,0 +1,10 @@
+# Build context of frontend/Dockerfile. Never send .env files, installed
+# packages or old builds to Docker; the image installs and builds its own.
+node_modules/
+.next/
+test-results/
+playwright-report/
+.env
+.env.*
+Dockerfile
+*.log

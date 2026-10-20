@@ -1,0 +1,137 @@
+# HEALTH-11 in production: database, API, website and Caddy (HTTPS).
+# Settings and secrets come from .env.production (never committed; copy
+# .env.production.example). Start, from the project folder:
+#
+#   docker compose -f compose.production.yml --env-file .env.production up -d --build
+#
+# This is a separate Docker project ("health11-prod") with its own database, so
+# it never touches the development database of docker-compose.yml.
+
+name: health11-prod
+
+services:
+  postgres:
+    image: postgres:16.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.production}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # No ports: only the API can reach the database.
+    networks:
+      internal:
+        ipv4_address: 172.29.11.13
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt: ["no-new-privileges:true"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    image: health11-backend:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: .env.production
+        required: true
+    environment:
+      # These always win over .env.production.
+      ENVIRONMENT: production
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env.production}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      DATABASE_URL: ""
+      MODEL_DIR: /app/var/models
+      CORS_ORIGINS: https://${SITE_HOST:?Set SITE_HOST in .env.production}
+      # Only Caddy and the website may tell the API a visitor's IP
+      # (their fixed addresses on the internal network below).
+      FORWARDED_ALLOW_IPS: 172.29.11.10,172.29.11.11
+      # A font path from Windows does not exist inside the container.
+      REPORT_FONT_PATH: ""
+    volumes:
+      - models:/app/var/models
+    # No ports: browsers reach the API only through the website and Caddy.
+    networks:
+      internal:
+        ipv4_address: 172.29.11.12
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  web:
+    build:
+      context: ./frontend
+      target: runtime
+    image: health11-web:latest
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_URL: http://backend:8000
+      BACKEND_PUBLIC_WS_URL: wss://${SITE_HOST:?Set SITE_HOST in .env.production}
+      # Caddy sets X-Forwarded-For; the website is reachable only through Caddy.
+      TRUST_PROXY_HEADERS: "true"
+    networks:
+      internal:
+        ipv4_address: 172.29.11.11
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  caddy:
+    image: caddy:2.11.7@sha256:685ae3d7c34d9b5f8caeddc5d14051db7bbd88ff1f5a2fa0c16bd8ca328fb7af
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      SITE_HOST: ${SITE_HOST:?Set SITE_HOST in .env.production}
+      CADDY_TLS: ${CADDY_TLS:?Set CADDY_TLS in .env.production}
+    ports:
+      # 127.0.0.1: only this computer can open the site. On a server set
+      # PUBLISH_IP=0.0.0.0 in .env.production.
+      - "${PUBLISH_IP:-127.0.0.1}:80:80"
+      - "${PUBLISH_IP:-127.0.0.1}:443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      internal:
+        ipv4_address: 172.29.11.10
+    security_opt: ["no-new-privileges:true"]
+
+networks:
+  internal:
+    ipam:
+      config:
+        # Every service has a fixed address here. If Docker says this
+        # "overlaps" with another network, change the 172.29.11 part here and
+        # in FORWARDED_ALLOW_IPS and every ipv4_address above.
+        - subnet: 172.29.11.0/24
+
+volumes:
+  postgres_data:
+  models:
+  caddy_data:
+  caddy_config:

@@ -43,9 +43,12 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: requirements*.lock.txt
 
-      - name: Install pinned dependencies
-        run: pip install -r requirements.txt
+      - name: Install exactly the locked packages (the same as the Docker image)
+        run: |
+          pip install --no-deps --only-binary=:all: -r requirements.lock.txt -r requirements-test.lock.txt
+          pip check
 
       - name: Apply migrations
         run: alembic upgrade head
@@ -129,9 +132,12 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: requirements*.lock.txt
 
-      - name: Install pinned Python dependencies
-        run: pip install -r requirements.txt
+      - name: Install exactly the locked Python packages
+        run: |
+          pip install --no-deps --only-binary=:all: -r requirements.lock.txt
+          pip check
 
       - uses: actions/setup-node@v4
         with:
@@ -162,3 +168,37 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+
+  images:
+    name: Production images (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Backend image
+        run: docker build -f backend/Dockerfile --target runtime -t health11-backend .
+
+      - name: Backend test image (same packages plus pytest)
+        run: docker build -f backend/Dockerfile --target test -t health11-backend-test .
+
+      - name: Website image
+        run: docker build -t health11-web frontend
+
+      - name: Caddy configuration is valid
+        run: >-
+          docker run --rm -e SITE_HOST=localhost -e CADDY_TLS=internal
+          -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2.11.7@sha256:685ae3d7c34d9b5f8caeddc5d14051db7bbd88ff1f5a2fa0c16bd8ca328fb7af
+          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: Compose file is valid and refuses missing secrets
+        run: |
+          cp .env.production.example .env.production
+          if docker compose -f compose.production.yml --env-file .env.production config > /dev/null 2>&1; then
+            echo "compose accepted empty secrets"; exit 1
+          fi
+          sed -e 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-only-not-a-secret/' \
+              -e 's/^JWT_SECRET_KEY=$/JWT_SECRET_KEY=ci-only-not-a-secret-0123456789abcdef/' \
+              .env.production.example > .env.production
+          docker compose -f compose.production.yml --env-file .env.production config > /dev/null
