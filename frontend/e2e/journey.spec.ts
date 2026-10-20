@@ -176,7 +176,8 @@ test("Scenario Builder: a fire at C1 is saved", async () => {
   await page.goto("/scenarios");
   await page.getByRole("button", { name: "New scenario" }).click();
   await page.getByLabel("Scenario name").fill("Fire at C1");
-  await page.getByRole("button", { name: "Add a hazard" }).click();
+  // A new scenario starts with one hazard (a serious fire that does not spread); only its place is chosen.
+  await expect(page.getByRole("group", { name: "Hazard 1" })).toBeVisible();
   await page.getByLabel("Place", { exact: true }).selectOption({ label: "C1 (corridor)" });
   await page.getByRole("button", { name: "Save scenario" }).click();
   await expect(page.getByText("The scenario is saved.")).toBeVisible();
