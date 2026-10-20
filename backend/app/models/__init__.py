@@ -17,7 +17,7 @@ from app.models.simulation import (
     Parameter,
     SimulationRun,
 )
-from app.models.user import RefreshToken, User, UserRole
+from app.models.user import PasswordResetCode, RefreshToken, User, UserRole
 
 __all__ = [
     "AuditLog",
@@ -32,6 +32,7 @@ __all__ = [
     "Node",
     "NodeType",
     "Organization",
+    "PasswordResetCode",
     "Parameter",
     "RateLimitEvent",
     "RefreshToken",

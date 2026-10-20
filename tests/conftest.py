@@ -72,6 +72,13 @@ SAFE_AI_SETTINGS = {
     "groq_model": None,
     "ollama_url": "http://127.0.0.1:11434",
     "ollama_model": None,
+    # E-mail: off unless a test turns it on (with a fake sender); a real
+    # SMTP_* in the developer's .env is never used.
+    "smtp_host": None,
+    "smtp_username": None,
+    "smtp_password": None,
+    "smtp_from": None,
+    "smtp_security": "starttls",
 }
 
 

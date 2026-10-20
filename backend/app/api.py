@@ -9,6 +9,7 @@ from app.facility_api import router as facility_router
 from app.floor_io import router as floor_io_router
 from app.graph_api import router as graph_router
 from app.parameter_api import router as parameter_router
+from app.password_reset import router as password_reset_router
 from app.people_api import router as people_router
 from app.people_io import router as people_io_router
 from app.reports_api import router as reports_router
@@ -19,6 +20,7 @@ from app.users_api import router as users_router
 
 router = APIRouter()
 router.include_router(auth_router)
+router.include_router(password_reset_router)
 router.include_router(facility_router)
 router.include_router(graph_router)
 router.include_router(floor_io_router)
