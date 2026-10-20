@@ -17,6 +17,9 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 SENDER_NAME = "HEALTH-11"
+LOGIN_REFUSED = ("The mail server refused the SMTP_USERNAME / SMTP_PASSWORD at login. For Gmail, "
+                 "SMTP_PASSWORD must be a 16-letter app password (2-step verification on), not the "
+                 "account password; after several failed logins Gmail may refuse for a while")
 
 
 class MailError(Exception):
@@ -54,11 +57,16 @@ def send_email(to_address: str, subject: str, text: str) -> None:
                 server.starttls(context=ssl.create_default_context())
                 server.ehlo()
             if settings.smtp_username and password:
-                server.login(settings.smtp_username, password)
+                try:
+                    server.login(settings.smtp_username, password)
+                except smtplib.SMTPServerDisconnected:
+                    # Gmail sometimes hangs up instead of answering "wrong password".
+                    raise MailError(LOGIN_REFUSED) from None
             server.send_message(message)
     except smtplib.SMTPAuthenticationError:
-        raise MailError("The mail server refused the SMTP_USERNAME / SMTP_PASSWORD "
-                        "(for Gmail: use an app password)") from None
+        raise MailError(LOGIN_REFUSED) from None
+    except MailError:
+        raise
     except (smtplib.SMTPException, OSError, ssl.SSLError) as exc:
         raise MailError(f"The mail server could not be reached or refused the message "
                         f"({type(exc).__name__})") from None

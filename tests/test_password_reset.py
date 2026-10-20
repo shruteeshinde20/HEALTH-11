@@ -275,6 +275,16 @@ def test_a_refused_password_is_reported_without_the_password(smtp, monkeypatch):
     assert "app password" in str(caught.value) and "wrong-secret-value" not in str(caught.value)
 
 
+def test_a_hang_up_at_login_is_explained_as_a_refused_login(smtp, monkeypatch):
+    def hang_up(self, username, password):
+        raise smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+
+    monkeypatch.setattr(FakeSMTP, "login", hang_up)
+    with pytest.raises(mailer.MailError, match="16-letter app password") as caught:
+        mailer.send_email("someone@example.com", "Subject", "Body")
+    assert "app-password" not in str(caught.value)
+
+
 def test_the_message_has_a_sender_name_and_plain_text(smtp):
     message = mailer.build_message("someone@example.com", "Subject", "Your code: 123456")
     assert message["From"] == "HEALTH-11 <health11.alerts@gmail.com>"
