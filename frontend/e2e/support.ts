@@ -18,12 +18,14 @@ export const PORTS = {
   ai: Number(process.env.E2E_AI_PORT ?? 11500),
   smtp: Number(process.env.E2E_SMTP_PORT ?? 11525),
   mail: Number(process.env.E2E_MAIL_PORT ?? 11526),   // the fake mail server's inbox (HTTP)
+  osm: Number(process.env.E2E_OSM_PORT ?? 11527),     // the fake OpenStreetMap (Overpass) server
 };
 // localhost (not 127.0.0.1): browsers keep Secure cookies on http://localhost.
 export const WEB_URL = `http://localhost:${PORTS.web}`;
 export const API_URL = `http://127.0.0.1:${PORTS.api}`;
 export const AI_URL = `http://127.0.0.1:${PORTS.ai}`;
 export const MAIL_URL = `http://127.0.0.1:${PORTS.mail}`;
+export const OSM_URL = `http://127.0.0.1:${PORTS.osm}`;
 
 const E2E_DATABASE = "health11_e2e";
 

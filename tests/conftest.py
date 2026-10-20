@@ -79,6 +79,8 @@ SAFE_AI_SETTINGS = {
     "smtp_password": None,
     "smtp_from": None,
     "smtp_security": "starttls",
+    # OpenStreetMap: on, but tests answer with a fake transport (no internet).
+    "osm_enabled": True,
 }
 
 

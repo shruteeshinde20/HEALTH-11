@@ -406,6 +406,19 @@ Admin page, or the server operator uses `scripts/reset_password.py`
 SMS codes are not offered: in India every business SMS needs DLT registration
 and costs money.
 
+## 14. Outside data (optional)
+
+| Source | What it adds | Key | Settings |
+|---|---|---|---|
+| OpenStreetMap (Overpass API) | Facility Manager → **Find on OpenStreetMap**: hospitals near the hospital's map position; **Use this** saves an address and position | none | `OSM_ENABLED`, `OVERPASS_URL`, `OSM_SEARCHES_PER_DAY` (default 100), `OSM_SEARCHES_PER_ORGANIZATION_PER_DAY` (default 30) |
+
+Outside data is shown with its source, licence and time, and is never used
+silently in a simulation. OpenStreetMap data is © OpenStreetMap contributors,
+under the [ODbL](https://www.openstreetmap.org/copyright). The public Overpass
+server is free; its fair-use rule for programs that use it regularly is about
+100 searches a day, so that is this server's daily total. Tests never call it
+(a fake server answers).
+
 ## API overview (all under `/api/v1`, header `Authorization: Bearer <token>`)
 
 | Resource | Endpoints |

@@ -76,6 +76,15 @@ quality, roles, multi-tenant isolation).
   `.env` / `.env.production`. Tests never send e-mail (fake sender; the
   browser tests use a local fake mail server).
 
+## Outside data: OpenStreetMap
+
+- Only Administrators and Emergency Commanders can search, for a hospital of
+  their own organization. Only numbers (radius, position) go into the query.
+  The answer is parsed defensively and shown as text; links open
+  openstreetmap.org in a new tab without access back to this page.
+- Searches are limited per organization and in total per day (fair use);
+  `OVERPASS_URL` must be https (http only on this computer, for tests).
+
 ## Demo data (step 18)
 
 - `scripts/seed_demo.py` loads made-up data through the API (same validation

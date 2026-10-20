@@ -68,7 +68,11 @@ hospital has an address, a time zone (used for the times shown in reports) and
 an optional **map position** (latitude and longitude in decimal degrees; in a map
 app, right-click the hospital and copy its position, then paste both numbers
 into Latitude). The position is needed for outside data such as weather and
-official alerts.
+official alerts. With a position, **Find on OpenStreetMap** lists hospitals that
+OpenStreetMap knows nearby; **Use this** saves that place's address and
+position (and its name, if you tick the box). OpenStreetMap is written by
+volunteers, so check it is the right place. Data © OpenStreetMap contributors
+(ODbL).
 **Import CSV / GeoJSON** adds the places and paths of a floor file to one of
 your floors (nothing already on the floor is changed); it is available once a
 floor exists. Each floor has **Export** links (JSON, GeoJSON, CSV). **Open map**

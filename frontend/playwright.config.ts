@@ -4,7 +4,7 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { AI_URL, API_URL, MAIL_URL, PORTS, REPO_DIR, WEB_URL, e2eDatabaseUrl, environment, python } from "./e2e/support";
+import { AI_URL, API_URL, MAIL_URL, OSM_URL, PORTS, REPO_DIR, WEB_URL, e2eDatabaseUrl, environment, python } from "./e2e/support";
 
 const databaseUrl = e2eDatabaseUrl();     // refuses anything but /health11_e2e
 const py = `"${python()}"`;
@@ -45,6 +45,13 @@ export default defineConfig({
       env: environment({ E2E_SMTP_PORT: String(PORTS.smtp), E2E_MAIL_PORT: String(PORTS.mail) }),
     },
     {
+      // Stand-in for OpenStreetMap's Overpass API: no internet during tests.
+      command: "node e2e/fake-overpass.mjs",
+      url: `${OSM_URL}/`,
+      reuseExistingServer: false,
+      env: environment({ E2E_OSM_PORT: String(PORTS.osm) }),
+    },
+    {
       // Empty the e2e database, build it again with the migrations, start the API.
       command: `${py} -m alembic downgrade base && ${py} -m alembic upgrade head && `
         + `${py} -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port ${PORTS.api}`,
@@ -65,6 +72,8 @@ export default defineConfig({
         SMTP_FROM: "health11@e2e.test",
         SMTP_USERNAME: "",
         SMTP_PASSWORD: "",
+        OSM_ENABLED: "true",
+        OVERPASS_URL: `${OSM_URL}/api/interpreter`,
       }),
     },
     {

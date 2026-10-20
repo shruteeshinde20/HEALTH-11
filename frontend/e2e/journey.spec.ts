@@ -294,6 +294,28 @@ test("Forgot password: the Staff User gets a code by e-mail and sets a new passw
   await visitorContext.close();
 });
 
+test("Facility Manager: map position, then a nearby hospital from OpenStreetMap (test server)", async () => {
+  await page.goto("/facilities");
+  await page.getByRole("button", { name: "Buildings & floors" }).first().click();
+  await page.getByRole("button", { name: "Edit hospital" }).click();
+  const edit = page.getByRole("dialog", { name: "Edit hospital" });
+  await edit.getByLabel(/^Latitude/).fill("18.5204, 73.8567");   // a pair pasted from a map app
+  await edit.getByRole("button", { name: "Save" }).click();
+  await expect(edit).toBeHidden();
+  await expect(page.getByText("18.52040° N, 73.85670° E")).toBeVisible();
+
+  await page.getByRole("button", { name: "Find on OpenStreetMap" }).click();
+  const osm = page.getByRole("dialog", { name: "Find on OpenStreetMap" });
+  await osm.getByRole("button", { name: "Search OpenStreetMap" }).click();
+  const row = osm.getByRole("row").filter({ hasText: "E2E Nearby Hospital" });
+  await expect(row).toContainText("1 Test Road, Pune");
+  await expect(row).toContainText("111 m");
+  await expect(osm.getByRole("link", { name: "© OpenStreetMap contributors (ODbL)" })).toBeVisible();
+  await row.getByRole("button", { name: "Use this" }).click();
+  await expect(osm).toBeHidden();
+  await expect(page.getByText(/1 Test Road, Pune · Time zone .* · 18\.52140° N, 73\.85670° E/)).toBeVisible();
+});
+
 test("Settings: an Administrator changes their own name", async () => {
   await page.goto("/settings");
   await page.getByLabel("Full name").fill("E2E Administrator");

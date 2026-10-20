@@ -65,6 +65,28 @@ export type Hospital = {
   updated_at: string;
 };
 
+/** One hospital found on OpenStreetMap near a position. */
+export type OsmPlace = {
+  osm_type: "node" | "way" | "relation";
+  osm_id: number;
+  url: string;
+  name: string | null;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  distance_m: number;
+};
+
+/** GET /hospitals/{id}/openstreetmap */
+export type OsmSearchResult = {
+  source: string;
+  attribution: string;
+  attribution_url: string;
+  searched_at: string;
+  radius_m: number;
+  places: OsmPlace[];
+};
+
 export type Building = {
   id: number;
   hospital_id: number;

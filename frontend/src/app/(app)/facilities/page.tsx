@@ -11,6 +11,7 @@ import { Dialog } from "@/components/dialog.tsx";
 import {
   BuildingForm, DeleteConfirm, FloorExportLinks, FloorForm, FloorImport, HospitalForm,
 } from "@/components/facility-forms.tsx";
+import { OpenStreetMapSearch } from "@/components/openstreetmap-search.tsx";
 import { Card, DataTable, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/ui.tsx";
 import { useUser } from "@/lib/client/session.tsx";
 import { useAll } from "@/lib/client/use-api.ts";
@@ -23,6 +24,7 @@ const graphBuilder = APP_PAGES.find((page) => page.href === "/graph");
 type Open =
   | { kind: "add-hospital" }
   | { kind: "edit-hospital"; hospital: Hospital }
+  | { kind: "openstreetmap"; hospital: Hospital }
   | { kind: "delete-hospital"; hospital: Hospital }
   | { kind: "add-building"; hospital: Hospital }
   | { kind: "edit-building"; building: Building }
@@ -144,6 +146,11 @@ function FacilityManager() {
                 <button type="button" className="btn l" onClick={() => setOpen({ kind: "edit-hospital", hospital: selected })}>
                   Edit hospital
                 </button>
+                <button type="button" className="btn l" disabled={selected.latitude == null}
+                        title={selected.latitude == null ? "Add the map position first (Edit hospital)" : undefined}
+                        onClick={() => setOpen({ kind: "openstreetmap", hospital: selected })}>
+                  Find on OpenStreetMap
+                </button>
                 <button type="button" className="btn l" onClick={() => setOpen({ kind: "delete-hospital", hospital: selected })}>
                   Delete hospital
                 </button>
@@ -208,6 +215,9 @@ function FacilityManager() {
       </Dialog>
       <Dialog open={open?.kind === "edit-hospital"} title="Edit hospital" onClose={close}>
         {open?.kind === "edit-hospital" && <HospitalForm hospital={open.hospital} onSaved={saved} onCancel={close} />}
+      </Dialog>
+      <Dialog open={open?.kind === "openstreetmap"} title="Find on OpenStreetMap" onClose={close}>
+        {open?.kind === "openstreetmap" && <OpenStreetMapSearch hospital={open.hospital} onSaved={saved} onCancel={close} />}
       </Dialog>
       <Dialog open={open?.kind === "delete-hospital"} title="Delete hospital" onClose={close}>
         {open?.kind === "delete-hospital" && (

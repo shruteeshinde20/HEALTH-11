@@ -8,6 +8,7 @@ from app.auth import router as auth_router
 from app.facility_api import router as facility_router
 from app.floor_io import router as floor_io_router
 from app.graph_api import router as graph_router
+from app.outside_data_api import router as outside_data_router
 from app.parameter_api import router as parameter_router
 from app.password_reset import router as password_reset_router
 from app.people_api import router as people_router
@@ -22,6 +23,7 @@ router = APIRouter()
 router.include_router(auth_router)
 router.include_router(password_reset_router)
 router.include_router(facility_router)
+router.include_router(outside_data_router)
 router.include_router(graph_router)
 router.include_router(floor_io_router)
 # Before people_router: /patients/export must not be read as /patients/{patient_id}.

@@ -86,6 +86,15 @@ class Settings(BaseSettings):
     password_reset_requests_per_ip: int = Field(default=10, ge=1, le=100)
     password_reset_window_seconds: int = Field(default=3600, ge=60, le=86400)
 
+    # Outside data: OpenStreetMap (Overpass API, free, no key). Its fair-use
+    # rule for programs that use it regularly is about 100 searches a day, so
+    # this server stays below that in total and per organization.
+    osm_enabled: bool = True
+    overpass_url: str = "https://overpass-api.de/api/interpreter"
+    osm_timeout_seconds: float = Field(default=30.0, gt=0, le=180)
+    osm_searches_per_day: int = Field(default=100, ge=1, le=1000)
+    osm_searches_per_organization_per_day: int = Field(default=30, ge=1, le=1000)
+
     # Rate limits (stored in PostgreSQL, so they hold across server workers).
     rate_limit_window_seconds: int = 900
     login_max_attempts_per_ip: int = 30
@@ -153,6 +162,16 @@ class Settings(BaseSettings):
     @property
     def ollama_is_local(self) -> bool:
         return urlparse(self.ollama_url).hostname in {"127.0.0.1", "localhost", "::1"}
+
+    @field_validator("overpass_url")
+    @classmethod
+    def validate_overpass_url(cls, value: str) -> str:
+        value = value.strip()
+        parsed = urlparse(value)
+        local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+        if parsed.scheme not in {"https", "http"} or not parsed.hostname or (parsed.scheme == "http" and not local):
+            raise ValueError("OVERPASS_URL must be an https:// address (http:// only on this computer)")
+        return value
 
     @field_validator("smtp_security")
     @classmethod
