@@ -101,6 +101,9 @@ def test_backend_image_installs_only_the_locked_packages_and_runs_as_a_user():
     assert "alembic upgrade head" in cmd and "--proxy-headers" in cmd
     test_stage = " ".join(next(s for s in stages if s[0].endswith("AS test")))
     assert "requirements-test.lock.txt" in test_stage and "pip check" in test_stage
+    # The development-only demo seed is tested, but never shipped in production.
+    assert "seed_demo.py" in test_stage
+    assert "scripts" not in " ".join(stages[0]) + " ".join(final)
 
 
 def test_website_image_runs_the_standalone_server_as_a_user():

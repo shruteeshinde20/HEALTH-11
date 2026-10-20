@@ -60,6 +60,13 @@ quality, roles, multi-tenant isolation).
   production stack. A restore asks for a typed confirmation and makes a safety
   backup first. The `backups` folder is git-ignored.
 
+## Demo data (step 18)
+
+- `scripts/seed_demo.py` loads made-up data through the API (same validation
+  and audit log) in one transaction. It refuses unless `ENVIRONMENT=development`,
+  refuses the test databases, never prints the Administrator's password, and is
+  not part of the production image.
+
 ## Accepted risk
 
 | Item | Decision |

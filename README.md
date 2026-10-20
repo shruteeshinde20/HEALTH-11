@@ -1,7 +1,21 @@
 # HEALTH-11: Emergency Evac Graph
 
-Hospital evacuation planning (FastAPI + PostgreSQL). The full specification is in
-[PROJECT.md](PROJECT.md).
+Hospital evacuation planning. A hospital describes its buildings as a map of
+places and paths, adds patients and staff, and creates emergency scenarios
+(fire, smoke, hazmat, structural). HEALTH-11 finds routes that respect each
+patient's mobility, simulates the evacuation step by step, finds bottlenecks,
+compares routing methods and writes PDF and CSV reports. Many hospitals can
+use one installation; each sees only its own data.
+
+Built with FastAPI, PostgreSQL, Next.js and Docker. The full specification is
+in [PROJECT.md](PROJECT.md).
+
+| Read this | For |
+|---|---|
+| [User guide](docs/user-guide.md) | What every page does, roles, the AI features, and a 10-minute demo |
+| [Architecture](docs/architecture.md) | How the parts fit together, the code map, the rules every part follows |
+| [Security review](docs/security-review.md) | Security measures, the accepted risk and open items |
+| This README | Setup, running, tests, production, backups, demo data and the API |
 
 > HEALTH-11 supports planning and training. It does not replace a hospital's
 > official emergency procedures or fire-safety professionals.
@@ -303,6 +317,35 @@ again. The API brings an older backup up to date with the migrations. If
 loading fails, the message gives the command to put the safety backup back.
 Both scripts work only with `compose.production.yml`, never with the
 development database.
+
+## 11. Demo data (development only)
+
+`scripts/seed_demo.py` loads one clearly labelled, made-up organization into
+the **development** database, so the project can be shown in a few minutes:
+
+- "DEMO Organization (made-up data)" with one Administrator;
+- "DEMO Hospital" > "DEMO Block A" > "Ground floor", with PROJECT.md's Test
+  case floor (ICU, WardA, C1, C2, S1, S2, R1, R2, E1, E2);
+- 10 patients and 4 staff, all marked synthetic (codes start with `DEMO-`);
+- the default simulation parameters, with source "assumed, to be validated";
+- two scenarios: a drill without hazards, and the Test case fire at C1.
+
+It goes through the API, with the same checks and audit log as the website,
+in one transaction: everything is saved or nothing is. It refuses to run
+unless `ENVIRONMENT=development`, refuses `health11_test` and `health11_e2e`,
+and changes nothing if the DEMO organization already exists. The application
+never depends on it.
+
+With the development database running and migrated (sections 2 and 3):
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_demo.py
+```
+
+It asks for a password for the DEMO Administrator, typed twice and never
+shown. Then it prints the **Organization ID** and email to log in with. The
+[user guide](docs/user-guide.md#a-10-minute-demo-with-the-demo-data) has a
+walkthrough.
 
 ## API overview (all under `/api/v1`, header `Authorization: Bearer <token>`)
 

@@ -39,6 +39,7 @@ COPY requirements-test.lock.txt ./
 RUN pip install --no-deps --only-binary=:all: -r requirements-test.lock.txt \
  && pip check
 COPY tests ./tests
+COPY scripts/seed_demo.py ./scripts/seed_demo.py
 USER health11
 CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
 
