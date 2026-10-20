@@ -9,7 +9,6 @@
 #     (Caddy makes its own certificate; trust it once, see README section 9)
 #   on a server:     SITE_HOST=evac.example.org and CADDY_TLS=you@example.org
 #     (Caddy gets a free Let's Encrypt certificate and renews it)
-
 {
 	# The certificate authority stays inside this container; README section 9
 	# shows how to trust it on your PC yourself.

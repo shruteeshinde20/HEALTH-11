@@ -11,7 +11,9 @@ name: health11-prod
 
 services:
   postgres:
-    image: postgres:16.6
+    # The same PostgreSQL 16.6 as development, pinned by digest (read with
+    # docker images --digests postgres in step 17).
+    image: postgres:16.6@sha256:557fea37a744d5f4c8faab304b0a90858b53ab119735a88c131fd19dab802f36
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.production}

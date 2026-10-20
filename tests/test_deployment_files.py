@@ -172,6 +172,8 @@ def test_only_caddy_and_the_website_may_report_visitor_ips():
 def test_caddy_image_is_pinned_and_services_have_health_checks():
     services = _compose()["services"]
     assert DIGEST.search(services["caddy"]["image"])
+    assert services["postgres"]["image"].startswith("postgres:16.6@sha256:")
+    assert DIGEST.search(services["postgres"]["image"])
     for name in ("postgres", "backend", "web"):
         assert "healthcheck" in services[name]
     assert services["caddy"]["depends_on"] == {"web": {"condition": "service_healthy"}}
@@ -204,14 +206,25 @@ def test_git_ignores_production_secrets_and_backups():
     assert ".env.*" in rules and "!.env.production.example" in rules and "backups/" in rules
 
 
-@pytest.mark.parametrize("script", ["scripts/backup.ps1", "scripts/restore.ps1"])
+@pytest.mark.parametrize("script", ["scripts/backup.ps1", "scripts/restore.ps1",
+                                    "scripts/new-production-secrets.ps1"])
 def test_scripts_work_in_windows_powershell(script):
     data = (ROOT / script).read_bytes()
     # Windows PowerShell 5.1 reads files without a BOM as the local code page.
     assert data.isascii(), f"{script} must contain only ASCII characters"
     text = data.decode("ascii")
-    assert "compose.production.yml" in text and ".env.production" in text
+    assert ".env.production" in text
     assert "docker-compose.yml" not in text, "the scripts must never touch the development database"
+
+
+def test_secrets_script_never_shows_or_replaces_a_secret():
+    text = _read("scripts/new-production-secrets.ps1")
+    assert "RandomNumberGenerator" in text
+    # Only empty values are filled; a set password is kept.
+    assert 'already has a value: kept' in text
+    for line in text.splitlines():
+        if "Write-Host" in line or "Write-Output" in line:
+            assert "New-Secret" not in line and "$lines[" not in line
 
 
 def test_restore_asks_first_and_keeps_a_safety_backup():

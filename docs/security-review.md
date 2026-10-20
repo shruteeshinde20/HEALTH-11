@@ -40,7 +40,7 @@ quality, roles, multi-tenant isolation).
   packages they need. The image installs it with `--no-deps --only-binary=:all:`
   and `pip check`, so nothing unpinned or compiled at build time gets in. A test
   keeps it in line with `requirements.txt`.
-- Images: the base images are pinned by digest. The API and the website run as
+- Images: the base images and the PostgreSQL, Caddy images are pinned by digest. The API and the website run as
   ordinary users, without Linux capabilities (`cap_drop: ALL`) and with
   `no-new-privileges`. `.dockerignore` files keep `.env` files, `node_modules`
   and backups out of images.
@@ -53,7 +53,8 @@ quality, roles, multi-tenant isolation).
   addresses of Caddy and the website (`FORWARDED_ALLOW_IPS`).
 - Secrets: `.env.production` is git-ignored. Docker refuses to start while
   `POSTGRES_PASSWORD` or `JWT_SECRET_KEY` is empty, so the database is never
-  created with a missing password. The API's own production checks still apply
+  created with a missing password. `scripts/new-production-secrets.ps1` fills
+  them with random values without showing them and never replaces a set value. The API's own production checks still apply
   (secret length, no free Gemini tier).
 - Backups: `scripts/backup.ps1` and `scripts/restore.ps1` use only the
   production stack. A restore asks for a typed confirmation and makes a safety
@@ -71,4 +72,3 @@ quality, roles, multi-tenant isolation).
 |---|---|
 | Optional context imports (OpenStreetMap, NASA FIRMS, Open-Meteo, data.gov.in, NDMA), listed as optional in PROJECT.md "Data policy". | Not started; needs your decision (some need API keys). |
 | Audit log rows still carry `updated_at` / `deleted_at` columns (unused; audit rows are never changed or deleted by the app). | Left as is; removing columns is not worth a risky migration. |
-| The `postgres:16.6` image is pinned by version, not by digest (shared with the development setup). | Pinned by digest once its digest has been read on your PC. |

@@ -203,18 +203,17 @@ Ports 80 and 443 must be free, and Docker Desktop must be running.
 
 ```powershell
 Copy-Item .env.production.example .env.production
-notepad .env.production
 ```
 
-Fill in `POSTGRES_PASSWORD` and `JWT_SECRET_KEY` with **new** random values, not
-the development ones. Docker refuses to start while they are empty. Generate
-each value with:
+Docker refuses to start while `POSTGRES_PASSWORD` or `JWT_SECRET_KEY` is
+empty. This fills both with new random values without showing them (it never
+replaces a value that is set, because the database keeps its first password):
 
 ```powershell
-.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
+.\scripts\new-production-secrets.ps1
 ```
 
-Put your AI key in `GROQ_API_KEY` too, or choose another `AI_PROVIDER`. The
+Then open the file with `notepad .env.production` and put your AI key in `GROQ_API_KEY` too, or choose another `AI_PROVIDER`. The
 free Gemini tier is refused in production. Ollama on the same PC cannot be
 reached from inside Docker.
 
