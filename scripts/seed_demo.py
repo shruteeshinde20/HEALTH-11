@@ -23,6 +23,7 @@ from the DEMO_ADMIN_PASSWORD environment variable. It is never printed.
 from __future__ import annotations
 
 import getpass
+import logging
 import os
 import sys
 from pathlib import Path
@@ -219,6 +220,9 @@ def main() -> int:
             return 0
 
         password = _password()
+
+        # The in-process requests are not worth a log line each.
+        logging.getLogger("httpx").setLevel(logging.WARNING)
 
         # One transaction for everything: the API's own commits become
         # savepoints inside it, so a failure anywhere saves nothing.
