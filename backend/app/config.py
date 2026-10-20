@@ -90,7 +90,9 @@ class Settings(BaseSettings):
     # rule for programs that use it regularly is about 100 searches a day, so
     # this server stays below that in total and per organization.
     osm_enabled: bool = True
-    overpass_url: str = "https://overpass-api.de/api/interpreter"
+    # One address, or several separated by commas: tried in order when one is
+    # busy or down (both are free public servers listed on the OSM wiki).
+    overpass_url: str = "https://overpass-api.de/api/interpreter,https://overpass.private.coffee/api/interpreter"
     osm_timeout_seconds: float = Field(default=30.0, gt=0, le=180)
     osm_searches_per_day: int = Field(default=100, ge=1, le=1000)
     osm_searches_per_organization_per_day: int = Field(default=30, ge=1, le=1000)
@@ -166,12 +168,19 @@ class Settings(BaseSettings):
     @field_validator("overpass_url")
     @classmethod
     def validate_overpass_url(cls, value: str) -> str:
-        value = value.strip()
-        parsed = urlparse(value)
-        local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
-        if parsed.scheme not in {"https", "http"} or not parsed.hostname or (parsed.scheme == "http" and not local):
-            raise ValueError("OVERPASS_URL must be an https:// address (http:// only on this computer)")
-        return value
+        urls = [part.strip() for part in value.split(",") if part.strip()]
+        if not urls or len(urls) > 5:
+            raise ValueError("OVERPASS_URL needs one to five addresses, separated by commas")
+        for url in urls:
+            parsed = urlparse(url)
+            local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+            if parsed.scheme not in {"https", "http"} or not parsed.hostname or (parsed.scheme == "http" and not local):
+                raise ValueError("OVERPASS_URL must use https:// addresses (http:// only on this computer)")
+        return ",".join(urls)
+
+    @property
+    def overpass_urls(self) -> list[str]:
+        return self.overpass_url.split(",")
 
     @field_validator("smtp_security")
     @classmethod

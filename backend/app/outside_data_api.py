@@ -58,7 +58,7 @@ def openstreetmap_nearby(hospital_id: int, db: Db, user: Editor,
 
     try:
         places = openstreetmap.nearby_hospitals(
-            settings.overpass_url, hospital.latitude, hospital.longitude, radius_m,
+            settings.overpass_urls, hospital.latitude, hospital.longitude, radius_m,
             timeout=settings.osm_timeout_seconds, transport=OSM_TRANSPORT,
         )
     except openstreetmap.OsmError as exc:

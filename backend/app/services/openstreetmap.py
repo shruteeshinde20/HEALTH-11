@@ -21,6 +21,13 @@ MAX_RESULTS = 25
 class OsmError(Exception):
     """OpenStreetMap could not answer (message is safe to show)."""
 
+    def __init__(self, message: str, *, try_next: bool = False):
+        super().__init__(message)
+        self.try_next = try_next   # busy or down: another server may answer
+
+
+BUSY_STATUSES = frozenset({429, 502, 503, 504})
+
 
 @dataclass(frozen=True)
 class OsmPlace:
@@ -87,16 +94,34 @@ def parse(payload: dict, latitude: float, longitude: float) -> list[OsmPlace]:
     return places[:MAX_RESULTS]
 
 
-def nearby_hospitals(url: str, latitude: float, longitude: float, radius_m: int, *,
+def nearby_hospitals(urls: list[str], latitude: float, longitude: float, radius_m: int, *,
                      timeout: float, transport: httpx.BaseTransport | None = None) -> list[OsmPlace]:
+    """Ask the servers in order; the next one is tried only when one is busy or down."""
+    last: OsmError | None = None
+    for url in urls:
+        try:
+            return _ask(url, latitude, longitude, radius_m, timeout=timeout, transport=transport)
+        except OsmError as error:
+            if not error.try_next:
+                raise
+            last = error
+    if len(urls) > 1:
+        raise OsmError(f"OpenStreetMap's servers are busy or cannot be reached right now (tried {len(urls)}). "
+                       "Wait a minute and try again.")
+    raise last or OsmError("OpenStreetMap could not be reached.")
+
+
+def _ask(url: str, latitude: float, longitude: float, radius_m: int, *,
+         timeout: float, transport: httpx.BaseTransport | None) -> list[OsmPlace]:
     try:
         with httpx.Client(timeout=timeout, transport=transport,
                           headers={"User-Agent": USER_AGENT, "Accept": "application/json"}) as client:
             response = client.post(url, data={"data": overpass_query(latitude, longitude, radius_m)})
     except httpx.HTTPError:
-        raise OsmError("OpenStreetMap could not be reached. Check the internet connection and try again.") from None
-    if response.status_code in (429, 504):
-        raise OsmError("OpenStreetMap is busy right now. Wait a minute and try again.")
+        raise OsmError("OpenStreetMap could not be reached. Check the internet connection and try again.",
+                       try_next=True) from None
+    if response.status_code in BUSY_STATUSES:
+        raise OsmError("OpenStreetMap is busy right now. Wait a minute and try again.", try_next=True)
     if response.status_code != 200:
         raise OsmError(f"OpenStreetMap answered with an error ({response.status_code}). Try again later.")
     try:

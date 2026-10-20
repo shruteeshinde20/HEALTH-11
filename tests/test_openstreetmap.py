@@ -46,14 +46,20 @@ def client(db_session):
         app.dependency_overrides.clear()
 
 
+MAIN = "https://overpass-api.de/api/interpreter"
+SECOND = "https://overpass.private.coffee/api/interpreter"
+
+
 @pytest.fixture
 def overpass(monkeypatch):
-    """Fake Overpass server; records each request and answers `reply`."""
-    state = {"requests": [], "reply": (200, OVERPASS_ANSWER)}
+    """Fake Overpass servers; record each request and answer `reply`, or
+    `replies[url]` for a given server."""
+    state = {"requests": [], "reply": (200, OVERPASS_ANSWER), "replies": {}}
+    monkeypatch.setattr(get_settings(), "overpass_url", MAIN)
 
     def handler(request: httpx.Request) -> httpx.Response:
         state["requests"].append(request)
-        status, body = state["reply"]
+        status, body = state["replies"].get(str(request.url), state["reply"])
         if isinstance(body, Exception):
             raise body
         return httpx.Response(status, json=body)
@@ -137,7 +143,8 @@ def test_the_radius_is_limited(client, overpass, radius):
 
 
 @pytest.mark.parametrize("reply, words", [
-    ((429, {}), "busy"), ((504, {}), "busy"), ((500, {}), "error (500)"),
+    ((429, {}), "busy"), ((502, {}), "busy"), ((503, {}), "busy"), ((504, {}), "busy"),
+    ((500, {}), "error (500)"),
     ((200, ["not", "an", "object"]), None),
     ((200, httpx.ConnectError("down")), "could not be reached"),
 ])
@@ -150,6 +157,32 @@ def test_problems_at_openstreetmap_are_explained(client, overpass, reply, words)
         assert response.status_code == 200 and response.json()["places"] == []
     else:
         assert response.status_code == 503 and words in response.json()["error"]["message"]
+
+
+def test_a_busy_server_is_skipped_and_the_search_counts_once(client, overpass, monkeypatch):
+    monkeypatch.setattr(get_settings(), "overpass_url", f"{MAIN},{SECOND}")
+    overpass["replies"][MAIN] = (502, {})
+    h = register(client)
+    hospital_id = hospital(client, h)
+    response = search(client, h, hospital_id)
+    assert response.status_code == 200 and response.json()["places"][0]["name"] == "Near Hospital"
+    assert [str(r.url) for r in overpass["requests"]] == [MAIN, SECOND]
+
+
+def test_when_every_server_is_busy_it_says_so(client, overpass, monkeypatch):
+    monkeypatch.setattr(get_settings(), "overpass_url", f"{MAIN},{SECOND}")
+    overpass["reply"] = (504, {})
+    h = register(client)
+    response = search(client, h, hospital(client, h))
+    assert response.status_code == 503 and "tried 2" in response.json()["error"]["message"]
+
+
+def test_a_bad_request_is_not_sent_to_the_next_server(client, overpass, monkeypatch):
+    monkeypatch.setattr(get_settings(), "overpass_url", f"{MAIN},{SECOND}")
+    overpass["reply"] = (400, {})
+    h = register(client)
+    response = search(client, h, hospital(client, h))
+    assert response.status_code == 503 and len(overpass["requests"]) == 1
 
 
 def test_searches_per_organization_are_limited(client, overpass, monkeypatch):
@@ -183,7 +216,11 @@ def test_only_editors_of_the_same_organization(client, overpass):
     assert search(client, staff, hospital_id).status_code == 403
 
 
-def test_overpass_address_must_be_https_unless_on_this_computer():
+def test_overpass_addresses_must_be_https_unless_on_this_computer():
     with pytest.raises(ValidationError, match="OVERPASS_URL"):
         Settings(_env_file=None, overpass_url="http://overpass.example.org/api/interpreter")
+    with pytest.raises(ValidationError, match="OVERPASS_URL"):
+        Settings(_env_file=None, overpass_url=f"{MAIN},http://plain.example.org/api")
+    assert Settings(_env_file=None).overpass_urls == [MAIN, SECOND]
+    assert Settings(_env_file=None, overpass_url=f" {MAIN} , ").overpass_urls == [MAIN]
     Settings(_env_file=None, overpass_url="http://127.0.0.1:12345/api/interpreter")

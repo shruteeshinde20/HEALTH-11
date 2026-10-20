@@ -415,8 +415,12 @@ and costs money.
 Outside data is shown with its source, licence and time, and is never used
 silently in a simulation. OpenStreetMap data is © OpenStreetMap contributors,
 under the [ODbL](https://www.openstreetmap.org/copyright). The public Overpass
-server is free; its fair-use rule for programs that use it regularly is about
-100 searches a day, so that is this server's daily total. Tests never call it
+servers are free; their fair-use rule for programs that use them regularly is
+about 100 searches a day, so that is this server's daily total. The main
+server (overpass-api.de) is often busy, so a search that gets a busy answer
+(429, 502, 503, 504) or no connection tries the next server in `OVERPASS_URL`
+(by default overpass.private.coffee, also a free public server listed on the
+OpenStreetMap wiki); it still counts as one search. Tests never call it
 (a fake server answers).
 
 ## API overview (all under `/api/v1`, header `Authorization: Bearer <token>`)
