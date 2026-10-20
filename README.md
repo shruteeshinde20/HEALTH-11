@@ -349,6 +349,24 @@ shown. Then it prints the **Organization ID** and email to log in with. The
 [user guide](docs/user-guide.md#a-10-minute-demo-with-the-demo-data) has a
 walkthrough.
 
+## 12. Forgotten password
+
+The website has no "forgot password" e-mail. An Administrator can set a new
+password for other users on the Admin page. If the only Administrator has
+forgotten theirs, whoever runs the server can set one directly in the
+database:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\reset_password.py --list
+.\.venv\Scripts\python.exe scripts\reset_password.py --organization <Organization ID> --email <e-mail>
+```
+
+`--list` shows each Organization ID with its accounts (e-mail and role only).
+The new password is asked twice and never shown. Earlier logins of that
+account end, its failed-login lockout is cleared, and the change goes into the
+organization's audit log. It uses the database that `.env` points at (the
+development setup); the production image does not contain this script.
+
 ## API overview (all under `/api/v1`, header `Authorization: Bearer <token>`)
 
 | Resource | Endpoints |
