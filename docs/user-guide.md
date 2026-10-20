@@ -52,6 +52,9 @@ becomes its Administrator.
 The public pages. Login needs the **Organization ID**, your email and your
 password. After 5 wrong passwords for one account, logins to it are paused
 for a while; sign-up and login are also limited per network address.
+**Forgot password?** e-mails a 6-digit code (valid 10 minutes, works once) to
+the account's address; enter it with a new password. This needs e-mail to be
+set up on the server (README section 13) and a real inbox for the account.
 
 ### Dashboard
 Where your hospital stands right now: number of hospitals, active scenarios,

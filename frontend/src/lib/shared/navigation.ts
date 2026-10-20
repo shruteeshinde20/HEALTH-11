@@ -11,4 +11,4 @@ export function safeNextPath(value: string | null | undefined): string {
 }
 
 /** Pages anyone can open without logging in. */
-export const PUBLIC_PATHS = new Set(["/", "/login", "/register"]);
+export const PUBLIC_PATHS = new Set(["/", "/login", "/register", "/forgot-password"]);

@@ -57,6 +57,7 @@ export function LoginForm({ next }: { next: string }) {
       <input id="password" name="password" type="password" required autoComplete="current-password"
              value={password} onChange={(e) => setPassword(e.target.value)} aria-invalid={Boolean(fields.password)} />
       {fields.password && <p className="field-error">{fields.password}</p>}
+      <p className="sm mt-1"><Link href="/forgot-password">Forgot password?</Link></p>
 
       {error !== null && Object.keys(fields).length === 0 && (
         <p role="alert" className="field-error">{describeError(error)}</p>
