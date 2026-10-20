@@ -30,8 +30,10 @@ export function readLocation(latitudeText: string, longitudeText: string): Locat
   let lat = latitudeText.trim();
   let lon = longitudeText.trim();
   if (!lon && lat.includes(",")) {
-    const parts = lat.split(",");
-    if (parts.length === 2) [lat, lon] = [parts[0].trim(), parts[1].trim()];
+    const [first, second, ...rest] = lat.split(",");
+    if (first !== undefined && second !== undefined && rest.length === 0) {
+      [lat, lon] = [first.trim(), second.trim()];
+    }
   }
   if (!lat && !lon) return { ok: true, latitude: null, longitude: null };
   if (!lat) return { ok: false, field: "latitude", message: "Give the latitude too, or leave both empty" };
