@@ -3,7 +3,9 @@
 // Charts (Recharts, PROJECT.md stack). Colors are fixed slots validated for
 // color-vision deficiency on the light surface; text uses the text colors,
 // never the series color. Every chart sits next to a table with the same
-// numbers, so nothing is told by color alone.
+// numbers, so nothing is told by color alone. The drawings are hidden from
+// screen readers (the table carries the numbers), so Recharts' keyboard layer
+// is switched off: nothing focusable may sit inside aria-hidden content.
 
 import {
   Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -28,7 +30,7 @@ export function MeasureBars({ title, unit, data }: { title: string; unit: string
       ) : (
         <div className="h-[180px] w-full" aria-hidden="true">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={shown} margin={{ top: 18, right: 8, bottom: 0, left: 0 }}>
+            <BarChart data={shown} margin={{ top: 18, right: 8, bottom: 0, left: 0 }} accessibilityLayer={false}>
               <CartesianGrid vertical={false} stroke={GRID} />
               <XAxis dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={{ stroke: GRID }} />
               <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={44} />
@@ -54,7 +56,7 @@ export function EvacuationTimeline({ points }: { points: TimelinePoint[] }) {
       <figcaption className="mb-1 text-[13px] font-semibold text-ink">People over time</figcaption>
       <div className="h-[240px] w-full" aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={points} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+          <LineChart data={points} margin={{ top: 8, right: 16, bottom: 0, left: 0 }} accessibilityLayer={false}>
             <CartesianGrid vertical={false} stroke={GRID} />
             <XAxis dataKey="t" type="number" domain={[0, "dataMax"]} tick={AXIS_TICK} tickLine={false}
                    axisLine={{ stroke: GRID }} unit=" s" />

@@ -189,7 +189,9 @@ test("Algorithm Comparison: three charts and the Test case values", async () => 
   for (const chart of ["Evacuation time (s), everyone out only", "Mean walk (m)", "Mean risk exposure"]) {
     await expect(page.getByRole("figure", { name: chart })).toBeVisible();
   }
-  await expect(page.getByRole("figure", { name: "Mean walk (m)" }).locator("svg.recharts-surface")).toBeVisible();
+  const walk = page.getByRole("figure", { name: "Mean walk (m)" });
+  await expect(walk.locator(".recharts-bar-rectangle")).toHaveCount(4);    // one bar per algorithm
+  await expect(walk.locator('[tabindex="0"]')).toHaveCount(0);
   for (const algorithm of ["Dijkstra", "A*"]) {
     const row = page.getByRole("row").filter({ has: page.getByText(algorithm, { exact: true }) });
     await expect(row).toContainText("48.5");     // (47 m + 50 m) / 2, PROJECT.md Test case with C1 blocked
@@ -211,7 +213,8 @@ test("Reports & History: details with the timeline chart, and a real PDF", async
   await page.getByRole("button", { name: "Details" }).first().click();
   const timeline = page.getByRole("figure", { name: "People over time" });
   await expect(timeline).toBeVisible();
-  await expect(timeline.locator("svg.recharts-surface")).toBeVisible();
+  await expect(timeline.locator(".recharts-line-curve")).toHaveCount(2);   // "Reached an exit" and "Still moving"
+  await expect(timeline.locator('[tabindex="0"]')).toHaveCount(0);       // nothing focusable inside the hidden drawing
 
   const pdf = await download(page, () => page.getByRole("link", { name: "PDF" }).first().click());
   expect(pdf.name).toMatch(/\.pdf$/);
