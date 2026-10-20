@@ -47,8 +47,12 @@
     margin: 0 0 10px;
     font-weight: 700;
   }
+  /* Links are underlined, so they never differ from text by color alone
+     (WCAG 1.4.1). Buttons (.btn) and the page navigation set their own look. */
   a {
     color: var(--color-ink);
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
   /* The design relies on the browser's default paragraph spacing, which
      Tailwind's reset removes. */
