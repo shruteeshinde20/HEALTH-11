@@ -17,6 +17,8 @@ in [PROJECT.md](PROJECT.md).
 | [Security review](docs/security-review.md) | Security measures, the accepted risk and open items |
 | This README | Setup, running, tests, production, backups, demo data and the API |
 
+Licence: [MIT](LICENSE). Free to use, change and share; it comes without any warranty.
+
 > HEALTH-11 supports planning and training. It does not replace a hospital's
 > official emergency procedures or fire-safety professionals.
 

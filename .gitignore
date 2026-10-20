@@ -18,3 +18,5 @@ var/
 backups/
 # Caddy's local certificate, copied out to trust it (README section 9)
 caddy-local-root.crt
+# Git bundles used to hand over code (not part of the project)
+*.bundle
