@@ -12,6 +12,7 @@ in [PROJECT.md](PROJECT.md).
 
 | Read this | For |
 |---|---|
+| [Project overview](docs/project-overview.md) | Features, where data comes from and is kept, what is AI, checks, limits and future scope |
 | [User guide](docs/user-guide.md) | What every page does, roles, the AI features, and a 10-minute demo |
 | [Architecture](docs/architecture.md) | How the parts fit together, the code map, the rules every part follows |
 | [Security review](docs/security-review.md) | Security measures, the accepted risk and open items |
