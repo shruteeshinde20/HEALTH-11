@@ -288,7 +288,7 @@ test("Forgot password: the Staff User gets a code by e-mail and sets a new passw
   await expect(visitor.getByRole("heading", { name: "Password changed" })).toBeVisible();
 
   await login(visitor, STAFF.email, STAFF.password);
-  await expect(visitor.getByRole("alert")).toContainText("Invalid organization, email, or password");
+  await expect(visitor.getByRole("alert").filter({ hasText: "Invalid organization, email, or password" })).toBeVisible();
   await login(visitor, STAFF.email, STAFF_NEW_PASSWORD);
   await expect(visitor).toHaveURL(/\/dashboard/);
   await visitorContext.close();
