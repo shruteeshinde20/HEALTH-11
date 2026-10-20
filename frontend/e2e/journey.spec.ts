@@ -294,6 +294,24 @@ test("Forgot password: the Staff User gets a code by e-mail and sets a new passw
   await visitorContext.close();
 });
 
+test("Map position, then the weather at the hospital in the Scenario Builder (test weather server)", async () => {
+  await page.goto("/facilities");
+  await page.getByRole("button", { name: "Buildings & floors" }).first().click();
+  await page.getByRole("button", { name: "Edit hospital" }).click();
+  const edit = page.getByRole("dialog", { name: "Edit hospital" });
+  await edit.getByLabel(/^Latitude/).fill("18.5204, 73.8567");   // a pair pasted from a map app
+  await edit.getByRole("button", { name: "Save" }).click();
+  await expect(edit).toBeHidden();
+  await expect(page.getByText("18.52040° N, 73.85670° E")).toBeVisible();
+
+  await page.goto("/scenarios");
+  await page.getByRole("button", { name: "New scenario" }).click();
+  const note = page.getByRole("region", { name: "Weather at the hospital now" });
+  await expect(note).toContainText("Wind from NW at 13 km/h (gusts 22 km/h); smoke drifts toward SE.");
+  await expect(note).toContainText("Information only: the simulation does not use the weather.");
+  await expect(note.getByRole("link", { name: "Weather data by Open-Meteo.com (CC BY 4.0)" })).toBeVisible();
+});
+
 test("Settings: an Administrator changes their own name", async () => {
   await page.goto("/settings");
   await page.getByLabel("Full name").fill("E2E Administrator");

@@ -68,7 +68,10 @@ hospital has an address, a time zone (used for the times shown in reports) and
 an optional **map position** (latitude and longitude in decimal degrees; in a map
 app, right-click the hospital and copy its position, then paste both numbers
 into Latitude). The position is needed for outside data such as weather and
-official alerts.
+official alerts. With a position, the Scenario Builder shows the **weather at
+the hospital now** (from Open-Meteo): wind direction and speed, where smoke
+would drift, temperature and humidity, with the time measured. It is
+information only; the simulation does not use it.
 **Import CSV / GeoJSON** adds the places and paths of a floor file to one of
 your floors (nothing already on the floor is changed); it is available once a
 floor exists. Each floor has **Export** links (JSON, GeoJSON, CSV). **Open map**

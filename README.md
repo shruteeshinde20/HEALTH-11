@@ -406,6 +406,20 @@ Admin page, or the server operator uses `scripts/reset_password.py`
 SMS codes are not offered: in India every business SMS needs DLT registration
 and costs money.
 
+## 14. Outside data (optional)
+
+| Source | What it adds | Key | Settings |
+|---|---|---|---|
+| Open-Meteo (weather) | Scenario Builder → **Weather at the hospital now**: wind from / speed / gusts, where smoke drifts, temperature, humidity, time measured | none | `WEATHER_ENABLED`, `OPEN_METEO_URL`, `WEATHER_CACHE_MINUTES` (15), `WEATHER_REQUESTS_PER_DAY` (2000) |
+
+It needs the hospital's map position (Facility Manager → Edit hospital). The
+weather is shown with its source, licence ("Weather data by Open-Meteo.com",
+CC BY 4.0) and time, and is **information only: simulations do not use it**.
+Open-Meteo's free API is for **non-commercial use** (up to 10,000 calls a
+day); commercial use needs one of their paid plans
+([terms](https://open-meteo.com/en/terms)). Answers are kept for 15 minutes
+per position. Tests never call Open-Meteo (a fake server answers).
+
 ## API overview (all under `/api/v1`, header `Authorization: Bearer <token>`)
 
 | Resource | Endpoints |

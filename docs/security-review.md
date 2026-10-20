@@ -76,6 +76,14 @@ quality, roles, multi-tenant isolation).
   `.env` / `.env.production`. Tests never send e-mail (fake sender; the
   browser tests use a local fake mail server).
 
+## Outside data: weather
+
+- Only the hospital's position (rounded to 4 decimals) is sent to Open-Meteo,
+  no patient or hospital data. Values are read defensively and shown as text;
+  missing values stay missing. `OPEN_METEO_URL` must be https (http only on
+  this computer, for tests). Calls are cached per position and limited per
+  day; WEATHER_ENABLED switches it off.
+
 ## Demo data (step 18)
 
 - `scripts/seed_demo.py` loads made-up data through the API (same validation

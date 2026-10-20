@@ -79,6 +79,8 @@ SAFE_AI_SETTINGS = {
     "smtp_password": None,
     "smtp_from": None,
     "smtp_security": "starttls",
+    # Weather: on, but tests answer with a fake transport (no internet).
+    "weather_enabled": True,
 }
 
 

@@ -86,6 +86,15 @@ class Settings(BaseSettings):
     password_reset_requests_per_ip: int = Field(default=10, ge=1, le=100)
     password_reset_window_seconds: int = Field(default=3600, ge=60, le=86400)
 
+    # Outside data: current weather from Open-Meteo (free, no key, for
+    # non-commercial use; commercial use needs their paid plan). Shown as
+    # information only; simulations do not use it.
+    weather_enabled: bool = True
+    open_meteo_url: str = "https://api.open-meteo.com/v1/forecast"
+    weather_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    weather_cache_minutes: int = Field(default=15, ge=1, le=120)
+    weather_requests_per_day: int = Field(default=2000, ge=1, le=10000)
+
     # Rate limits (stored in PostgreSQL, so they hold across server workers).
     rate_limit_window_seconds: int = 900
     login_max_attempts_per_ip: int = 30
@@ -153,6 +162,16 @@ class Settings(BaseSettings):
     @property
     def ollama_is_local(self) -> bool:
         return urlparse(self.ollama_url).hostname in {"127.0.0.1", "localhost", "::1"}
+
+    @field_validator("open_meteo_url")
+    @classmethod
+    def validate_open_meteo_url(cls, value: str) -> str:
+        value = value.strip()
+        parsed = urlparse(value)
+        local = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+        if parsed.scheme not in {"https", "http"} or not parsed.hostname or (parsed.scheme == "http" and not local):
+            raise ValueError("OPEN_METEO_URL must be an https:// address (http:// only on this computer)")
+        return value
 
     @field_validator("smtp_security")
     @classmethod
