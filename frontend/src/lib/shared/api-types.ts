@@ -171,6 +171,8 @@ export type RunDetail = RunSummary & {
   recommendations: { severity: string; text: string }[];
   injected_hazards: InjectedHazard[];
   map: RunMap;
+  /** The model values the run used (speeds, tick, ...), with their sources. */
+  parameters_used: ParameterUsed[];
   /** Counts sampled every simulation_frame_seconds, plus the final moment. */
   timeline: { t: number; evacuated: number; active: number; needs_assistance: number; reached_by_hazard: number }[];
 };
