@@ -192,7 +192,6 @@ export function FloorPlan({ places, paths, label, people = [], hazards = [], blo
       {places.map((place) => {
         const label = labels.get(place.id);
         if (!label) return null;
-        const exit = place.type === "exit";
         return (
           <text key={`label-${place.id}`} x={label.x} y={label.y} textAnchor={label.anchor} fontSize={label.size}
                 fill={TEXT}
