@@ -57,6 +57,11 @@ class Node(TenantMixin, TimestampMixin, Base):
             name="ck_node_evacuation_lift_type",
         ),
         Index("ix_node_org_floor", "organization_id", "floor_id"),
+        CheckConstraint("width_m IS NULL OR (width_m > 0 AND width_m <= 1000)",
+                        name="ck_node_width_range"),
+        CheckConstraint("length_m IS NULL OR (length_m > 0 AND length_m <= 1000)",
+                        name="ck_node_length_range"),
+        CheckConstraint("(width_m IS NULL) = (length_m IS NULL)", name="ck_node_size_pair"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -74,6 +79,11 @@ class Node(TenantMixin, TimestampMixin, Base):
     is_evacuation_lift: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
+    # Size of the place in metres, for the floor-plan drawing: width runs
+    # left to right (along x), length top to bottom (along y). Optional (both
+    # or neither); routes and simulations use the paths' distances, not this.
+    width_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    length_m: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class Edge(TenantMixin, TimestampMixin, Base):

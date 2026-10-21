@@ -23,6 +23,7 @@ import { useAll, useApi } from "@/lib/client/use-api.ts";
 import type { Building, Floor, FloorGraph, GraphEdge, GraphNode, Hospital } from "@/lib/shared/api-types.ts";
 import { describeError } from "@/lib/shared/errors.ts";
 import { isVertical, newPlacePosition, placeColour, roundPosition } from "@/lib/shared/graph.ts";
+import { formatSize } from "@/lib/shared/place-size.ts";
 
 // --- Canvas node ---------------------------------------------------------------------------
 
@@ -220,7 +221,7 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
               <h2>Selected: {selectedPlace.name}</h2>
               {canEdit
                 ? <PlaceForm key={selectedPlace.id} floorId={floor.id} place={selectedPlace} onSaved={updatePlace} />
-                : <p>{selectedPlace.type} · capacity {selectedPlace.capacity}{selectedPlace.is_blocked ? " · blocked" : ""}</p>}
+                : <p>{selectedPlace.type} · capacity {selectedPlace.capacity}{formatSize(selectedPlace) ? ` · ${formatSize(selectedPlace)}` : ""}{selectedPlace.is_blocked ? " · blocked" : ""}</p>}
               {isVertical(selectedPlace.type) && (
                 <>
                   <h3 className="mb-1 text-[14px] font-bold text-ink">Links to other floors</h3>
@@ -256,10 +257,10 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
       <Card className="mt-[14px]">
         <h2>Places ({places.length})</h2>
         {places.length === 0 ? <EmptyState>No places yet.</EmptyState> : (
-          <DataTable caption="Places" columns={["Name", "Type", "Capacity", "State", ""]}
+          <DataTable caption="Places" columns={["Name", "Type", "Capacity", "Size", "State", ""]}
             rows={[...places].sort((a, b) => a.name.localeCompare(b.name)).map((place) => ({
               key: place.id,
-              cells: [place.name, place.type, place.capacity,
+              cells: [place.name, place.type, place.capacity, formatSize(place) ?? "–",
                 place.is_blocked ? <Tag key="s" tone="b">Blocked</Tag> : place.is_evacuation_lift ? <Tag key="s" tone="ok">Evacuation lift</Tag> : "–",
                 <button key="sel" type="button" className="btn l" onClick={() => setSelection({ kind: "place", id: place.id })}>
                   {canEdit ? "Edit" : "View"}

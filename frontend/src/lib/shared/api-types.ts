@@ -109,6 +109,9 @@ export type GraphNode = {
   capacity: number;
   is_blocked: boolean;
   is_evacuation_lift: boolean;
+  /** Size in metres for the floor-plan drawing (both or neither). */
+  width_m: number | null;
+  length_m: number | null;
 };
 
 export type GraphEdge = {

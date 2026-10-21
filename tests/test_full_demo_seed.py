@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from app.db_session import get_db
 from app.main import app
-from app.models import AuditLog, Patient, Staff
+from app.models import AuditLog, Node, Patient, Staff
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -67,6 +67,8 @@ def test_the_full_demo_is_complete_labelled_and_feeds_the_ai(client, db_session)
     lifts = [n for n in nodes if n["type"] == "lift"]
     assert len(lifts) == 3 and all(n["is_evacuation_lift"] for n in lifts)
     assert {n["type"] for n in nodes} >= {"ward", "icu", "room", "corridor", "stair", "ramp", "lift", "exit", "assembly"}
+    # Every place is drawn to scale: a size in metres.
+    assert all(n["width_m"] > 0 and n["length_m"] > 0 for n in nodes)
 
     # Synthetic people, every mobility type, all placed.
     patients = db_session.scalars(select(Patient).where(Patient.organization_id == org_id)).all()
@@ -121,3 +123,28 @@ def test_the_staff_account_is_read_only(client):
     staff = login(client, summary["organization"]["slug"], "city.staff@example.com")
     assert client.get(f"{API}/patients", headers=staff).status_code == 200
     assert client.post(f"{API}/scenarios", headers=staff, json={"name": "x", "hazards": []}).status_code == 403
+
+
+def test_a_demo_loaded_before_sizes_gets_its_floor_plan_and_nothing_else(client, db_session):
+    summary = demo.load_full_demo(client, PASSWORD, run_simulations=False)
+    org_id = summary["organization"]["id"]
+    ward = db_session.get(Node, summary["node_ids"]["Ward 2A"])
+    lift = db_session.get(Node, summary["node_ids"]["Lift E 1"])
+    # As loaded by the earlier version: other positions, no sizes.
+    for node in (ward, lift):
+        node.x, node.y, node.width_m, node.length_m = 100.0, 30.0, None, None
+    ward.capacity = 99                        # a user's own change stays
+    db_session.flush()
+
+    assert demo.update_plan(db_session, org_id) == 2
+    assert (ward.x, ward.y, ward.width_m, ward.length_m) == (24, 22, 20, 12)
+    assert (lift.x, lift.y, lift.width_m, lift.length_m) == (48, 41, 3, 3)
+    assert ward.capacity == 99
+    entry = db_session.scalars(select(AuditLog).where(
+        AuditLog.organization_id == org_id, AuditLog.action == "demo.floor_plan_updated")).one()
+    assert entry.details["places_changed"] == 2 and entry.actor_user_id is not None
+
+    # A second time there is nothing to do, and nothing is logged.
+    assert demo.update_plan(db_session, org_id) == 0
+    assert db_session.scalar(select(func.count()).select_from(AuditLog).where(
+        AuditLog.organization_id == org_id, AuditLog.action == "demo.floor_plan_updated")) == 1

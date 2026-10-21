@@ -21,7 +21,7 @@ export function floorImportType(fileName: string): string | null {
 /** Columns of the CSV format, as written by the floor export. */
 export const FLOOR_CSV_COLUMNS = [
   "record_type", "name", "type", "x", "y", "capacity", "is_blocked", "is_evacuation_lift",
-  "from_node", "to_node", "distance", "width", "max_flow", "wheelchair_accessible", "stretcher_accessible",
+  "width_m", "length_m", "from_node", "to_node", "distance", "width", "max_flow", "wheelchair_accessible", "stretcher_accessible",
 ];
 
 export const NODE_TYPES = ["room", "ward", "icu", "corridor", "stair", "ramp", "lift", "exit", "assembly"];

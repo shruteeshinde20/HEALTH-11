@@ -60,15 +60,22 @@ LIFT = {"width": 2.0, "max_flow": 6}
 
 
 def floor_plan(level: int) -> tuple[list[dict], list[tuple[str, str, float, dict]]]:
-    """Places and paths of one floor. Distances in metres; x, y only place the drawing."""
+    """Places and paths of one floor. Positions (x, y) and sizes (width_m,
+    length_m) are in metres, drawn to scale; routes use the paths' distances."""
     p = "G" if level == 0 else str(level)
     nodes = [
-        {"name": f"{p} Corridor West", "type": "corridor", "x": 100, "y": 100, "capacity": 40},
-        {"name": f"{p} Corridor Centre", "type": "corridor", "x": 220, "y": 100, "capacity": 40},
-        {"name": f"{p} Corridor East", "type": "corridor", "x": 340, "y": 100, "capacity": 40},
-        {"name": f"Stair A {p}", "type": "stair", "x": 60, "y": 180, "capacity": 30},
-        {"name": f"Stair B {p}", "type": "stair", "x": 380, "y": 180, "capacity": 30},
-        {"name": f"Lift E {p}", "type": "lift", "x": 220, "y": 190, "capacity": 8, "is_evacuation_lift": True},
+        # The corridor runs west to east in three parts; stairs at both ends,
+        # the evacuation lift in a lobby on the south side.
+        {"name": f"{p} Corridor West", "type": "corridor", "x": 24, "y": 30, "capacity": 40,
+         "width_m": 14, "length_m": 3},
+        {"name": f"{p} Corridor Centre", "type": "corridor", "x": 48, "y": 30, "capacity": 40,
+         "width_m": 34, "length_m": 3},
+        {"name": f"{p} Corridor East", "type": "corridor", "x": 72, "y": 30, "capacity": 40,
+         "width_m": 14, "length_m": 3},
+        {"name": f"Stair A {p}", "type": "stair", "x": 15, "y": 30, "capacity": 30, "width_m": 4, "length_m": 4},
+        {"name": f"Stair B {p}", "type": "stair", "x": 81, "y": 30, "capacity": 30, "width_m": 4, "length_m": 4},
+        {"name": f"Lift E {p}", "type": "lift", "x": 48, "y": 41, "capacity": 8, "is_evacuation_lift": True,
+         "width_m": 3, "length_m": 3},
     ]
     edges = [
         (f"{p} Corridor West", f"{p} Corridor Centre", 24, FLAT),
@@ -77,15 +84,21 @@ def floor_plan(level: int) -> tuple[list[dict], list[tuple[str, str, float, dict
         (f"{p} Corridor East", f"Stair B {p}", 9, FLAT),
         (f"{p} Corridor Centre", f"Lift E {p}", 11, FLAT),
     ]
+    # (name, type, x, y, width, length, capacity, corridor part, distance m)
     if level == 0:
-        rooms = [("Emergency", "ward", 100, 30, 12), ("OPD", "room", 220, 30, 20),
-                 ("Pharmacy", "room", 340, 30, 6), ("Radiology", "room", 100, 170, 8),
-                 ("Kitchen", "room", 300, 170, 6)]
+        rooms = [("Emergency", "ward", 24, 22, 20, 12, 12, "West", 8),
+                 ("OPD", "room", 48, 22, 16, 12, 20, "Centre", 8),
+                 ("Pharmacy", "room", 72, 22, 10, 12, 6, "East", 8),
+                 ("Radiology", "room", 30, 38, 8, 6, 8, "West", 10),
+                 ("Kitchen", "room", 66, 38, 8, 6, 6, "East", 10)]
         nodes += [
-            {"name": "Entrance Ramp", "type": "ramp", "x": 20, "y": 100, "capacity": 20},
-            {"name": "Main Entrance Exit", "type": "exit", "x": -40, "y": 100, "capacity": 0},
-            {"name": "East Exit", "type": "exit", "x": 440, "y": 100, "capacity": 0},
-            {"name": "Assembly Point", "type": "assembly", "x": -100, "y": 100, "capacity": 0},
+            {"name": "Entrance Ramp", "type": "ramp", "x": 18, "y": 38, "capacity": 20,
+             "width_m": 4, "length_m": 6},
+            {"name": "Main Entrance Exit", "type": "exit", "x": 10, "y": 38, "capacity": 0,
+             "width_m": 2, "length_m": 3},
+            {"name": "East Exit", "type": "exit", "x": 84, "y": 30, "capacity": 0, "width_m": 2, "length_m": 3},
+            {"name": "Assembly Point", "type": "assembly", "x": -20, "y": 38, "capacity": 0,
+             "width_m": 10, "length_m": 10},
         ]
         edges += [
             ("G Corridor West", "Entrance Ramp", 10, FLAT),
@@ -94,18 +107,21 @@ def floor_plan(level: int) -> tuple[list[dict], list[tuple[str, str, float, dict
             ("Main Entrance Exit", "Assembly Point", 30, FLAT),
         ]
     elif level == 1:
-        rooms = [("Ward 1A", "ward", 100, 30, 20), ("Ward 1B", "ward", 340, 30, 20),
-                 ("ICU", "icu", 220, 30, 8), ("Nurses Station 1", "room", 160, 170, 6),
-                 ("Store Room 1", "room", 280, 170, 2)]
+        rooms = [("Ward 1A", "ward", 24, 22, 20, 12, 20, "West", 8),
+                 ("Ward 1B", "ward", 72, 22, 20, 12, 20, "East", 8),
+                 ("ICU", "icu", 48, 22, 12, 12, 8, "Centre", 8),
+                 ("Nurses Station 1", "room", 42, 38, 6, 6, 6, "Centre", 10),
+                 ("Store Room 1", "room", 54, 38, 6, 6, 2, "Centre", 10)]
     else:
-        rooms = [("Ward 2A", "ward", 100, 30, 20), ("Ward 2B", "ward", 340, 30, 20),
-                 ("Operating Theatre", "room", 220, 30, 6), ("Recovery", "ward", 160, 170, 6),
-                 ("Store Room 2", "room", 280, 170, 2)]
-    corridor_for = {100: "West", 160: "Centre", 220: "Centre", 280: "Centre", 300: "East", 340: "East"}
-    for name, kind, x, y, capacity in rooms:
-        nodes.append({"name": name, "type": kind, "x": x, "y": y, "capacity": capacity})
-        corridor = f"{p} Corridor {corridor_for[x]}"
-        edges.append((name, corridor, 8 if y < 100 else 10, FLAT))
+        rooms = [("Ward 2A", "ward", 24, 22, 20, 12, 20, "West", 8),
+                 ("Ward 2B", "ward", 72, 22, 20, 12, 20, "East", 8),
+                 ("Operating Theatre", "room", 48, 22, 14, 12, 6, "Centre", 8),
+                 ("Recovery", "ward", 42, 38, 6, 6, 6, "Centre", 10),
+                 ("Store Room 2", "room", 54, 38, 6, 6, 2, "Centre", 10)]
+    for name, kind, x, y, width, length, capacity, corridor, metres in rooms:
+        nodes.append({"name": name, "type": kind, "x": x, "y": y, "capacity": capacity,
+                      "width_m": width, "length_m": length})
+        edges.append((name, f"{p} Corridor {corridor}", metres, FLAT))
     return nodes, edges
 
 
@@ -264,6 +280,50 @@ def load_full_demo(client, password: str, *, run_simulations: bool = True) -> di
             "scenario_ids": scenario_ids, "runs": runs, "accounts": [a[1] for a in ACCOUNTS]}
 
 
+DRAWING_FIELDS = ("x", "y", "width_m", "length_m")
+
+
+def update_plan(session, organization_id: int) -> int:
+    """For a demo loaded before places had sizes: set the demo places' positions
+    and sizes (drawing only) to the plan above. Changes nothing else, and only
+    places of the demo hospital that still have their demo names. Returns how
+    many places changed; the change is recorded in the audit log."""
+    from sqlalchemy import select
+
+    from app.audit import record_audit
+    from app.models import Building, Floor, Hospital, Node, User
+
+    building_id = session.scalar(select(Building.id).join(Hospital, Building.hospital_id == Hospital.id).where(
+        Building.organization_id == organization_id, Building.name == BUILDING, Building.deleted_at.is_(None),
+        Hospital.name == HOSPITAL, Hospital.deleted_at.is_(None)))
+    if building_id is None:
+        return 0
+    changed = 0
+    for level in range(3):
+        floor_id = session.scalar(select(Floor.id).where(
+            Floor.organization_id == organization_id, Floor.building_id == building_id,
+            Floor.floor_number == level, Floor.deleted_at.is_(None)))
+        if floor_id is None:
+            continue
+        plan = {n["name"]: n for n in floor_plan(level)[0]}
+        for node in session.scalars(select(Node).where(
+                Node.organization_id == organization_id, Node.floor_id == floor_id,
+                Node.name.in_(plan), Node.deleted_at.is_(None))):
+            wanted = {field: float(plan[node.name][field]) for field in DRAWING_FIELDS}
+            if any(getattr(node, field) != value for field, value in wanted.items()):
+                for field, value in wanted.items():
+                    setattr(node, field, value)
+                changed += 1
+    if changed:
+        admin_id = session.scalar(select(User.id).where(
+            User.organization_id == organization_id, User.email == ACCOUNTS[0][1]))
+        record_audit(session, organization_id=organization_id, actor_user_id=admin_id,
+                     action="demo.floor_plan_updated", entity_type="building", entity_id=building_id,
+                     details={"places_changed": changed, "fields": list(DRAWING_FIELDS)})
+        session.flush()
+    return changed
+
+
 def main() -> int:
     from sqlalchemy import create_engine, make_url, select
     from sqlalchemy.orm import Session, sessionmaker
@@ -284,10 +344,18 @@ def main() -> int:
                 raise SeedError(f"Refusing {name!r}: that database belongs to the automated tests.")
             from app.models import Organization
 
-            existing = connection.execute(select(Organization.slug).where(
-                Organization.name == ORGANIZATION, Organization.deleted_at.is_(None))).scalar()
+            existing = connection.execute(select(Organization.id, Organization.slug).where(
+                Organization.name == ORGANIZATION, Organization.deleted_at.is_(None))).first()
         if existing:
-            print(f"The full demo is already loaded (Organization ID {existing}); nothing was changed.")
+            # Loaded earlier: only bring the floor-plan drawing up to date.
+            with Session(engine) as session, session.begin():
+                changed = update_plan(session, existing.id)
+            print(f"The full demo is already loaded (Organization ID {existing.slug}).")
+            if changed:
+                print(f"Updated the floor-plan drawing (positions and sizes in metres) of {changed} places; "
+                      "nothing else was changed.")
+            else:
+                print("The floor plan is up to date; nothing was changed.")
             return 0
 
         password = _password()

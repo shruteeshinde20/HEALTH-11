@@ -25,7 +25,15 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api_common import FiniteFloat, Name, NonNegativeFloat, PositiveFloat, get_active
+from app.api_common import (
+    SIZE_PAIR,
+    FiniteFloat,
+    Name,
+    NonNegativeFloat,
+    PlaceSize,
+    PositiveFloat,
+    get_active,
+)
 from app.audit import record_audit
 from app.db_session import get_db
 from app.models.facility import Floor
@@ -53,11 +61,15 @@ class ImportedNode(BaseModel):
     capacity: Annotated[int, Field(ge=0, le=100_000)] = 0
     is_blocked: bool = False
     is_evacuation_lift: bool = False
+    width_m: PlaceSize | None = None
+    length_m: PlaceSize | None = None
 
     @model_validator(mode="after")
     def _evacuation_lift_is_a_lift(self):
         if self.is_evacuation_lift and self.type != NodeType.LIFT:
             raise ValueError("Only a lift can be an evacuation lift")
+        if (self.width_m is None) != (self.length_m is None):
+            raise ValueError(SIZE_PAIR)
         return self
 
 
@@ -103,6 +115,11 @@ def _csv_unescape(value: str | None) -> str | None:
     return value
 
 
+def _optional_float(value: str | None) -> float | None:
+    """An empty CSV cell means "no value"."""
+    return float(value) if value is not None and value.strip() else None
+
+
 def _parse_csv(text: str) -> dict:
     nodes, edges = [], []
     for row in csv.DictReader(io.StringIO(text)):
@@ -116,6 +133,8 @@ def _parse_csv(text: str) -> dict:
                 "capacity": int(row.get("capacity") or 0),
                 "is_blocked": _parse_bool(row.get("is_blocked") or "false"),
                 "is_evacuation_lift": _parse_bool(row.get("is_evacuation_lift") or "false"),
+                "width_m": _optional_float(row.get("width_m")),
+                "length_m": _optional_float(row.get("length_m")),
             })
         elif kind == "edge":
             edges.append({
@@ -159,6 +178,8 @@ def _parse_geojson(payload: Any) -> dict:
                 "capacity": properties.get("capacity", 0),
                 "is_blocked": properties.get("is_blocked", False),
                 "is_evacuation_lift": properties.get("is_evacuation_lift", False),
+                "width_m": properties.get("width_m"),
+                "length_m": properties.get("length_m"),
             })
         elif kind == "edge" and geometry.get("type") == "LineString":
             edges.append({
@@ -362,6 +383,8 @@ def export_floor(
         "capacity": node.capacity,
         "is_blocked": node.is_blocked,
         "is_evacuation_lift": node.is_evacuation_lift,
+        "width_m": node.width_m,
+        "length_m": node.length_m,
     } for node in nodes]
 
     edge_records = [{
@@ -405,7 +428,7 @@ def export_floor(
         output = io.StringIO()
         fields = [
             "record_type", "name", "type", "x", "y", "capacity",
-            "is_blocked", "is_evacuation_lift", "from_node", "to_node", "distance",
+            "is_blocked", "is_evacuation_lift", "width_m", "length_m", "from_node", "to_node", "distance",
             "width", "max_flow", "wheelchair_accessible", "stretcher_accessible",
         ]
         writer = csv.DictWriter(output, fieldnames=fields)

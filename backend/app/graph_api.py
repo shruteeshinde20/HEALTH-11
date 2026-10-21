@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -23,7 +23,9 @@ from app.api_common import (
     NonNegativeFloat,
     Page,
     PageParams,
+    PlaceSize,
     PositiveFloat,
+    SIZE_PAIR,
     SearchQuery,
     changes_from,
     commit_or_conflict,
@@ -74,6 +76,14 @@ class NodeCreate(BaseModel):
     capacity: Capacity = 0
     is_blocked: bool = False
     is_evacuation_lift: bool = False
+    width_m: PlaceSize | None = None
+    length_m: PlaceSize | None = None
+
+    @model_validator(mode="after")
+    def size_pair(self):
+        if (self.width_m is None) != (self.length_m is None):
+            raise ValueError(SIZE_PAIR)
+        return self
 
 
 class NodeUpdate(BaseModel):
@@ -85,6 +95,9 @@ class NodeUpdate(BaseModel):
     capacity: Capacity | None = None
     is_blocked: bool | None = None
     is_evacuation_lift: bool | None = None
+    # null clears the size (send both as null).
+    width_m: PlaceSize | None = None
+    length_m: PlaceSize | None = None
 
 
 class NodeOut(BaseModel):
@@ -99,6 +112,8 @@ class NodeOut(BaseModel):
     capacity: int
     is_blocked: bool
     is_evacuation_lift: bool
+    width_m: float | None
+    length_m: float | None
     created_at: datetime
     updated_at: datetime
 
@@ -263,7 +278,11 @@ def create_node(payload: NodeCreate, db: Db, user: Editor, request: Request):
 @router.patch("/nodes/{node_id}", response_model=NodeOut)
 def update_node(node_id: int, payload: NodeUpdate, db: Db, user: Editor, request: Request):
     node = get_active(db, Node, node_id, user.organization_id, "Node")
-    changes = changes_from(payload, not_null=set(NodeUpdate.model_fields))
+    changes = changes_from(payload, not_null=set(NodeUpdate.model_fields) - {"width_m", "length_m"})
+    width = changes.get("width_m", node.width_m)
+    length = changes.get("length_m", node.length_m)
+    if (width is None) != (length is None):
+        raise HTTPException(status_code=422, detail=SIZE_PAIR)
     new_type = changes.get("type")
     final_type = new_type or node.type
     final_flag = changes.get("is_evacuation_lift", node.is_evacuation_lift)

@@ -349,6 +349,10 @@ parameters, 15 scenarios and 60 real simulation runs, so the
 evacuation-time predictor and the unusual-run alerts have enough data. It
 creates three accounts (Administrator, Emergency Commander, Staff User) with
 one password you choose. Same safety rules as above; it takes about a minute.
+Places have positions and sizes in metres, so the floor plan is drawn to scale.
+If the demo was loaded before places had sizes, running the script again only
+updates the demo places' positions and sizes (recorded in the audit log) and
+changes nothing else.
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\seed_full_demo.py
@@ -495,6 +499,11 @@ lists `node_names`, `floor_ids` and `distance_metres`.
   adds risk. Nodes about to be reached carry rising risk, which routes avoid.
 - During **fire or smoke**, ordinary lifts are not used. Mark protected lifts
   with `is_evacuation_lift: true` (only allowed on nodes of type `lift`).
+- **Place sizes:** a node may have `width_m` and `length_m` (metres, above 0
+  and at most 1,000, both or neither). They are used only to draw the floor
+  plan (width left to right along x, length top to bottom along y); routes and
+  simulations use the paths' distances. Floor files (CSV, JSON, GeoJSON) carry
+  them too; files without these columns still import.
 - Route around hazards: add `"scenario_id"` and `"minutes_elapsed"` to
   `POST /floors/{id}/route`. The response shows the real walking distance and,
   separately, the added `risk_cost_metres`.

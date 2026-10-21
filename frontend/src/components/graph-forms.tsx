@@ -12,6 +12,7 @@ import type { Floor, GraphEdge, GraphNode } from "@/lib/shared/api-types.ts";
 import { describeError } from "@/lib/shared/errors.ts";
 import { NODE_TYPES } from "@/lib/shared/files.ts";
 import { isVertical, parseNumber } from "@/lib/shared/graph.ts";
+import { readSize } from "@/lib/shared/place-size.ts";
 
 import { Buttons, Field, FormError } from "./facility-forms.tsx";
 
@@ -31,19 +32,23 @@ export function PlaceForm({ floorId, place, position, onSaved, onCancel }: {
   const [capacity, setCapacity] = useState(place ? String(place.capacity) : "");
   const [blocked, setBlocked] = useState(place?.is_blocked ?? false);
   const [evacuationLift, setEvacuationLift] = useState(place?.is_evacuation_lift ?? false);
+  const [width, setWidth] = useState(place?.width_m != null ? String(place.width_m) : "");
+  const [length, setLength] = useState(place?.length_m != null ? String(place.length_m) : "");
   const { busy, error, run } = useAction();
   const fields = fieldErrors(error);
 
   const capacityValue = capacity.trim() === "" ? 0 : parseNumber(capacity, 0, MAX_COUNT, true);
   const capacityValid = capacityValue !== null && !Number.isNaN(capacityValue);
-  const complete = name.trim() !== "" && type !== "" && capacityValid;
+  const size = readSize(width, length);
+  const complete = name.trim() !== "" && type !== "" && capacityValid && size.ok;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!complete) return;
+    if (!complete || !size.ok) return;
     const body = {
       name: name.trim(), type, capacity: capacityValue, is_blocked: blocked,
       is_evacuation_lift: type === "lift" && evacuationLift,
+      width_m: size.width_m, length_m: size.length_m,
     };
     const saved = await run(() => place
       ? apiRequest<GraphNode>(`/nodes/${place.id}`, { method: "PATCH", body })
@@ -67,6 +72,24 @@ export function PlaceForm({ floorId, place, position, onSaved, onCancel }: {
         <input id="place-capacity" type="number" min={0} max={MAX_COUNT} step={1} value={capacity}
                onChange={(e) => setCapacity(e.target.value)} aria-invalid={!capacityValid} />
       </Field>
+      <fieldset className="mt-3">
+        <legend className="font-bold">Size (optional)</legend>
+        <p id="place-size-hint" className="sm mt-1 mb-2">
+          In metres, used to draw the floor plan. Routes use the paths&apos; distances, not this.
+        </p>
+        <Field id="place-width" label="Width in metres (left to right)"
+               error={!size.ok && size.field === "width" ? size.message : fields.width_m}>
+          <input id="place-width" inputMode="decimal" autoComplete="off" value={width}
+                 onChange={(e) => setWidth(e.target.value)} aria-describedby="place-size-hint"
+                 aria-invalid={(!size.ok && size.field === "width") || Boolean(fields.width_m)} />
+        </Field>
+        <Field id="place-length" label="Length in metres (top to bottom)"
+               error={!size.ok && size.field === "length" ? size.message : fields.length_m}>
+          <input id="place-length" inputMode="decimal" autoComplete="off" value={length}
+                 onChange={(e) => setLength(e.target.value)} aria-describedby="place-size-hint"
+                 aria-invalid={(!size.ok && size.field === "length") || Boolean(fields.length_m)} />
+        </Field>
+      </fieldset>
       <label className="flex items-center gap-2 text-tx">
         <input type="checkbox" className="w-auto" checked={blocked} onChange={(e) => setBlocked(e.target.checked)} />
         Blocked (cannot be used)

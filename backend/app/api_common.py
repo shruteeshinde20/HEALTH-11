@@ -50,6 +50,9 @@ FiniteFloat = Annotated[float, Field(allow_inf_nan=False)]
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 PositiveFloat = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 Id = Annotated[int, Field(gt=0, le=2_147_483_647)]
+# A place's width or length in metres (floor-plan drawing).
+PlaceSize = Annotated[float, Field(gt=0, le=1000, allow_inf_nan=False)]
+SIZE_PAIR = "Give both width and length (metres), or neither"
 
 
 def _valid_timezone(value: str) -> str:

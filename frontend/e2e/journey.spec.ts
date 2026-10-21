@@ -143,6 +143,18 @@ test("Graph Builder shows the imported places", async () => {
   for (const place of ["ICU", "WardA", "C1", "C2", "E1", "E2"]) {
     await expect(plan.getByText(place, { exact: true })).toBeVisible();
   }
+
+  // A size in metres for the floor plan: saved, then shown in the list of places.
+  const places = page.getByRole("table", { name: "Places" });
+  await places.getByRole("row").filter({ has: page.getByRole("cell", { name: "ICU", exact: true }) })
+    .getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByRole("heading", { name: "Selected: ICU" })).toBeVisible();
+  await page.getByLabel("Width in metres (left to right)").fill("12");
+  await expect(page.getByText("Give the length too, or leave both empty")).toBeVisible();
+  await page.getByLabel("Length in metres (top to bottom)").fill("10.5");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(places.getByRole("row").filter({ has: page.getByRole("cell", { name: "ICU", exact: true }) })
+    .getByRole("cell", { name: "12 × 10.5 m" })).toBeVisible();
 });
 
 test("Patients & Staff: a CSV file is checked first, then saved; Export gives it back", async () => {
