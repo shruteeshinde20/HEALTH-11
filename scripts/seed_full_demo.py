@@ -159,13 +159,22 @@ def build_people(rng: random.Random) -> tuple[list[dict], list[dict]]:
     return patients, staff
 
 
+def empty_rooms() -> list[str]:
+    """Rooms where nobody is placed: training hazards start there, like most
+    real fires (kitchen, store room), so the runs show complete evacuations
+    for the predictor to learn from. Worked out from the plan and the people."""
+    occupied = {place for place, *_ in PATIENT_PLACES} | {place for place, *_ in STAFF_PLACES}
+    return [n["name"] for level in range(3) for n in floor_plan(level)[0]
+            if n["type"] == "room" and n["name"] not in occupied]
+
+
 def training_scenarios(rng: random.Random, places: list[str]) -> list[tuple]:
     out = []
     for i in range(1, TRAINING_SCENARIOS + 1):
         kind = rng.choice(["fire", "smoke", "hazmat", "structural"])
         origin = rng.choice(places)
         severity = rng.randint(2, 5)
-        spread = round(rng.uniform(0.5, 8.0), 1)
+        spread = round(rng.uniform(0.5, 4.0), 1)
         out.append((f"DEMO training {i:02d}: {kind} at {origin}",
                     f"Generated for training the evacuation-time predictor (severity {severity}, "
                     f"spreads {spread} m/min).", kind, origin, severity, spread))
@@ -233,10 +242,8 @@ def load_full_demo(client, password: str, *, run_simulations: bool = True) -> di
         place = person.pop("place")
         post("/staff", {**person, "node_id": ids[place], "is_synthetic": True})
 
-    hazard_places = [n["name"] for level in range(3) for n in floor_plan(level)[0]
-                     if n["type"] in {"room", "ward", "icu", "corridor"}]
     scenario_ids = []
-    for name, description, kind, origin, severity, spread in SHOWCASE + training_scenarios(rng, hazard_places):
+    for name, description, kind, origin, severity, spread in SHOWCASE + training_scenarios(rng, empty_rooms()):
         hazards = [] if kind is None else [{"name": f"{kind.title()} at {origin}", "type": kind,
                                             "origin_node_id": ids[origin], "severity": severity,
                                             "spread_rate": spread}]
