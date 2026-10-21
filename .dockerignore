@@ -23,3 +23,4 @@ tests/test_deployment_files.py
 scripts/*
 !scripts/seed_demo.py
 !scripts/reset_password.py
+!scripts/seed_full_demo.py

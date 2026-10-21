@@ -339,6 +339,21 @@ unless `ENVIRONMENT=development`, refuses `health11_test` and `health11_e2e`,
 and changes nothing if the DEMO organization already exists. The application
 never depends on it.
 
+**Full demo hospital.** For a demonstration with realistic amounts of data,
+`scripts/seed_full_demo.py` loads "DEMO City Hospital Group (made-up data)":
+a three-floor hospital (wards, ICU, operating theatre, emergency, pharmacy,
+kitchen, store rooms, two stair cores, an evacuation lift on every floor, an
+entrance ramp, two exits, an assembly point) with a map position, 40 synthetic
+patients and 15 synthetic staff drawn with a fixed random seed, default
+parameters, 15 scenarios and 60 real simulation runs, so the
+evacuation-time predictor and the unusual-run alerts have enough data. It
+creates three accounts (Administrator, Emergency Commander, Staff User) with
+one password you choose. Same safety rules as above; it takes about a minute.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\seed_full_demo.py
+```
+
 With the development database running and migrated (sections 2 and 3):
 
 ```powershell
