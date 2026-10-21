@@ -105,3 +105,14 @@ def no_real_network(monkeypatch):
             f"Tests must not make real network requests (tried {request.url.host})", request=request)
 
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", blocked)
+
+
+def pytest_runtest_logreport(report):
+    """On GitHub Actions, show each failing test as a note on the run (a
+    '::error' workflow command), so failures can be read without the log."""
+    if not os.environ.get("GITHUB_ACTIONS") or not report.failed:
+        return
+    path, line, _ = report.location
+    text = str(report.longrepr)[-1500:]
+    text = text.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+    print(f"\n::error file=tests/../{path},line={(line or 0) + 1}::{report.nodeid} ({report.when}): {text}")
