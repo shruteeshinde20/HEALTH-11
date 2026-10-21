@@ -11,19 +11,19 @@
 import { useId, useMemo } from "react";
 
 import {
-  OUTDOOR_TYPES, bounds, hasSize, labelBox, passages, personSpots, placeBoxes, placeLabels, pointKey,
-  scaleBarMetres, shownHazard, standingArea, unitsPerMetre, wallSide,
+  OUTDOOR_TYPES, bounds, drawingScale, hasSize, labelBox, passages, personSpots, placeBoxes, placeLabels, pointKey,
+  scaleBarMetres, shownHazard, standingArea, wallSide,
   type Box, type PlanPath, type PlanPlace,
 } from "@/lib/shared/floor-plan.ts";
 import { MOBILITY_LABELS, type HazardSpot, type Position } from "@/lib/shared/live.ts";
 
 // Light theme (PROJECT.md "Design"): tints of the design colours.
-const INK = "#1E3A5F";
-const ROOM_FILL: Record<string, string> = {
+export const INK = "#1E3A5F";
+export const ROOM_FILL: Record<string, string> = {
   ward: "#E3F0FB", icu: "#EDE7FB", room: "#FFFFFF", corridor: "#EEF2F7", stair: "#FDF3D3",
   ramp: "#FDF3D3", lift: "#E7ECF3", exit: "#16A34A", assembly: "#DCF5E7",
 };
-const PASSAGE = "#EEF2F7";
+export const PASSAGE = "#EEF2F7";
 export const PERSON_COLOURS = {
   ambulatory: "#2563EB", wheelchair: "#7C3AED", stretcher: "#C2410C", ventilator: "#BE185D", staff: "#0F766E",
 } as const;
@@ -209,14 +209,7 @@ export function FloorPlan({ places, paths, label, people = [], hazards = [], blo
 }
 
 function layout(places: PlanPlace[], paths: PlanPath[]) {
-  const measured = unitsPerMetre(places, paths);
-  let scale = measured;
-  if (scale === null) {
-    const xs = places.map((p) => p.x);
-    const ys = places.map((p) => p.y);
-    const extent = places.length ? Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) : 0;
-    scale = extent > 0 ? extent / 60 : 1;          // unknown: guess a floor about 60 m across
-  }
+  const { scale, measured } = drawingScale(places, paths);
   const boxes = placeBoxes(places, scale);
   const ways = passages(paths, boxes, scale);
   const indoor = places.filter((p) => !OUTDOOR_TYPES.has(p.type)).map((p) => boxes.get(p.id)!);
@@ -241,7 +234,7 @@ function layout(places: PlanPlace[], paths: PlanPath[]) {
   const view = { ...grown, height: grown.height + scale * 3 };      // room for the scale bar
   const placeAt = new Map<string, Box>();
   for (const place of places) placeAt.set(pointKey(place), standingArea(boxes.get(place.id)!, labels.get(place.id)));
-  return { boxes, scale, measured: measured !== null, view, footprint, ways, placeAt, labels, minFont };
+  return { boxes, scale, measured, view, footprint, ways, placeAt, labels, minFont };
 }
 
 function Place({ place, box, s, sized }: { place: PlanPlace; box: Box; s: number; sized: boolean }) {

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  alongRoute, arrange, bounds, labelBox, labelSize, placeLabels, standingArea, passages, personSpots, placeBoxes, pointKey, scaleBarMetres, shownHazard,
+  PX_PER_METRE, alongRoute, arrange, bounds, canvasRect, centreFromCanvas, drawingScale, labelBox, labelSize, placeLabels, standingArea, passages, personSpots, placeBoxes, pointKey, scaleBarMetres, shownHazard,
   unitsPerMetre, wallPoint, wallSide, type PlanPath, type PlanPlace,
 } from "../../src/lib/shared/floor-plan.ts";
 
@@ -153,4 +153,20 @@ test("names go at the top of rooms, people stand below them; exit names go outsi
   assert.ok(west.x < footprint.x);
   const area4 = labelBox("Main Entrance Exit", west);
   assert.ok(area4.x + area4.w <= west.x + 1e-9 && area4.w > 0);
+});
+
+test("the floor's scale: measured from the paths, or a guess for a floor about 60 m across", () => {
+  const places = [place(1, "corridor", 0, 0), place(2, "exit", 120, 0)];
+  assert.deepEqual(drawingScale(places, [path(1, 1, 2, 24)]), { scale: 5, measured: true });
+  assert.deepEqual(drawingScale(places, []), { scale: 2, measured: false });
+  assert.deepEqual(drawingScale([], []), { scale: 1, measured: false });
+});
+
+test("the Graph Builder canvas: a place's rectangle in pixels, and its centre back after a drag", () => {
+  const k = PX_PER_METRE / 5;                                   // a plan drawn at 5 units per metre
+  const rect = canvasRect({ cx: 100, cy: 50, w: 100, h: 60 }, k);  // a 20 x 12 m ward
+  assert.deepEqual(rect, { x: 120, y: 48, width: 240, height: 144 });
+  assert.deepEqual(centreFromCanvas({ x: rect.x, y: rect.y }, rect, k), { x: 100, y: 50 });
+  // Dragged 24 px (2 m) to the right.
+  assert.deepEqual(centreFromCanvas({ x: rect.x + 24, y: rect.y }, rect, k), { x: 110, y: 50 });
 });

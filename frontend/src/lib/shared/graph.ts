@@ -1,5 +1,5 @@
 // Floor-graph rules used by the Graph Builder and Scenario Builder.
-// Colours follow docs/design/preview.html.
+// (Colours of the floor plan are in components/floor-plan.tsx.)
 
 export type PlaceType = "room" | "ward" | "icu" | "corridor" | "stair" | "ramp" | "lift" | "exit" | "assembly";
 
@@ -8,15 +8,6 @@ export const VERTICAL_TYPES: ReadonlySet<string> = new Set(["stair", "ramp", "li
 
 export function isVertical(type: string): boolean {
   return VERTICAL_TYPES.has(type);
-}
-
-/** Fill colour of a place (preview: blocked red, exits green, stairs/ramps yellow, wards/ICU blue). */
-export function placeColour(type: string, blocked: boolean): string {
-  if (blocked) return "#F9C5C5";
-  if (type === "exit" || type === "assembly") return "#BFE8D0";
-  if (type === "stair" || type === "ramp" || type === "lift") return "#FCE9B2";
-  if (type === "icu" || type === "ward") return "#D6E9F8";
-  return "#FFFFFF";
 }
 
 /** Where a newly added place appears: to the right of the existing ones

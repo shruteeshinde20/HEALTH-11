@@ -6,8 +6,8 @@
 // keyboard.
 
 import {
-  ConnectionMode, Handle, Position, ReactFlow, applyNodeChanges,
-  type Connection, type Edge, type Node, type NodeChange, type NodeMouseHandler, type NodeProps,
+  Background, BackgroundVariant, ConnectionMode, ReactFlow, applyNodeChanges,
+  type Connection, type Edge, type NodeChange, type NodeMouseHandler,
 } from "@xyflow/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -16,42 +16,18 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 import { Dialog } from "@/components/dialog.tsx";
 import { DeleteConfirm } from "@/components/facility-forms.tsx";
 import { FloorLinks, PathForm, PlaceForm } from "@/components/graph-forms.tsx";
+import {
+  OUTLINE_ID, buildCanvasEdges, buildCanvasNodes, canvasScale, edgeTypes, nodeTypes, type CanvasNode,
+} from "@/components/plan-canvas.tsx";
 import { Card, DataTable, EmptyState, ErrorState, LoadingState, PageHeader, Tag } from "@/components/ui.tsx";
 import { apiRequest } from "@/lib/client/api.ts";
 import { useUser } from "@/lib/client/session.tsx";
 import { useAll, useApi } from "@/lib/client/use-api.ts";
 import type { Building, Floor, FloorGraph, GraphEdge, GraphNode, Hospital } from "@/lib/shared/api-types.ts";
 import { describeError } from "@/lib/shared/errors.ts";
-import { isVertical, newPlacePosition, placeColour, roundPosition } from "@/lib/shared/graph.ts";
+import { PX_PER_METRE, centreFromCanvas, drawingScale } from "@/lib/shared/floor-plan.ts";
+import { isVertical, newPlacePosition, roundPosition } from "@/lib/shared/graph.ts";
 import { formatSize } from "@/lib/shared/place-size.ts";
-
-// --- Canvas node ---------------------------------------------------------------------------
-
-type PlaceNode = Node<{ place: GraphNode }, "place">;
-
-function PlaceNodeView({ data, selected }: NodeProps<PlaceNode>) {
-  const { place } = data;
-  return (
-    <div
-      title={`${place.name} (${place.type}${place.is_blocked ? ", blocked" : ""})`}
-      className="flex h-[40px] min-w-[40px] items-center justify-center rounded-full px-2 text-[11px] text-tx"
-      style={{
-        background: placeColour(place.type, place.is_blocked),
-        border: selected ? "2.5px solid #1E3A5F" : "1.2px solid #94A3B8",
-      }}
-    >
-      {place.name}
-      <Handle type="source" position={Position.Right} aria-label={`Connect ${place.name}`} />
-    </div>
-  );
-}
-
-// Defined outside the component, as the React Flow docs advise.
-const nodeTypes = { place: PlaceNodeView };
-
-const toFlowNode = (place: GraphNode): PlaceNode => ({
-  id: String(place.id), type: "place", position: { x: place.x, y: place.y }, data: { place },
-});
 
 // --- Page ----------------------------------------------------------------------------------
 
@@ -119,45 +95,45 @@ type Open =
 function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: FloorGraph; otherFloors: Floor[] }) {
   const user = useUser();
   const canEdit = user.role !== "Staff User";
-  const [nodes, setNodes] = useState<PlaceNode[]>(() => graph.nodes.map(toFlowNode));
+  const [nodes, setNodes] = useState<CanvasNode[]>(() => buildCanvasNodes(graph.nodes, graph.edges));
   const [paths, setPaths] = useState<GraphEdge[]>(graph.edges);
   const [selection, setSelection] = useState<Selection>(null);
   const [open, setOpen] = useState<Open>(null);
   const [moveError, setMoveError] = useState<unknown>(null);
 
-  const places = useMemo(() => nodes.map((n) => n.data.place), [nodes]);
+  const places = useMemo(() => nodes.flatMap((n) => (n.type === "place" ? [n.data.place] : [])), [nodes]);
   const placeName = useCallback((id: number) => places.find((p) => p.id === id)?.name ?? `#${id}`, [places]);
 
-  const edges: Edge[] = useMemo(() => paths.map((path) => ({
-    id: String(path.id),
-    source: String(path.from_node_id),
-    target: String(path.to_node_id),
-    type: "straight",
-    label: `${path.distance}`,
-    selected: selection?.kind === "path" && selection.id === path.id,
-    style: {
-      stroke: path.is_blocked ? "#DC2626" : selection?.kind === "path" && selection.id === path.id ? "#5FA3D9" : "#CBD5E1",
-      strokeWidth: selection?.kind === "path" && selection.id === path.id ? 4 : 2,
-      strokeDasharray: path.is_blocked ? "6 4" : undefined,
-    },
-  })), [paths, selection]);
-
-  const updatePlace = useCallback((saved: GraphNode) => {
-    setNodes((current) => current.map((n) => (n.id === String(saved.id) ? { ...n, data: { place: saved } } : n)));
+  const edges = useMemo(() => buildCanvasEdges(paths, selection?.kind === "path" ? selection.id : null), [paths, selection]);
+  // Places and paths changed: draw the rooms again (sizes and scale may change).
+  const redraw = useCallback((nextPlaces: GraphNode[], nextPaths: GraphEdge[]) => {
+    setNodes((current) => buildCanvasNodes(nextPlaces, nextPaths, current));
   }, []);
 
-  const onNodesChange = useCallback((changes: NodeChange<PlaceNode>[]) => {
+  const updatePlace = useCallback((saved: GraphNode) => {
+    setNodes((current) => {
+      const nextPlaces = current.flatMap((n) => (n.type === "place" ? [n.data.place.id === saved.id ? saved : n.data.place] : []));
+      return buildCanvasNodes(nextPlaces, paths, current);
+    });
+  }, [paths]);
+
+  const onNodesChange = useCallback((changes: NodeChange<CanvasNode>[]) => {
     setNodes((current) => applyNodeChanges(changes, current));
   }, []);
 
   // React Flow passes a native mouse or touch event here, so the event is not used.
-  const onNodeDragStop = useCallback((_event: unknown, node: PlaceNode) => {
-    const x = roundPosition(node.position.x);
-    const y = roundPosition(node.position.y);
+  const onNodeDragStop = useCallback((_event: unknown, node: CanvasNode) => {
+    if (node.type !== "place") return;
+    // The canvas is in pixels; the place is saved in the floor's own units.
+    const { pxPerUnit } = canvasScale(places, paths);
+    const size = { width: node.measured?.width ?? node.width ?? 0, height: node.measured?.height ?? node.height ?? 0 };
+    const centre = centreFromCanvas(node.position, size, pxPerUnit);
+    const x = roundPosition(centre.x);
+    const y = roundPosition(centre.y);
     setMoveError(null);
     apiRequest<GraphNode>(`/nodes/${node.id}`, { method: "PATCH", body: { x, y } })
       .then(updatePlace, (error: unknown) => setMoveError(error));
-  }, [updatePlace]);
+  }, [updatePlace, places, paths]);
 
   const onConnect = useCallback((connection: Connection) => {
     if (connection.source && connection.target && connection.source !== connection.target) {
@@ -165,8 +141,8 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
     }
   }, []);
 
-  const onNodeClick = useCallback<NodeMouseHandler<PlaceNode>>((_event, node) => {
-    setSelection({ kind: "place", id: Number(node.id) });
+  const onNodeClick = useCallback<NodeMouseHandler<CanvasNode>>((_event, node) => {
+    if (node.id !== OUTLINE_ID) setSelection({ kind: "place", id: Number(node.id) });
   }, []);
   const onEdgeClick = useCallback((_event: unknown, edge: Edge) => setSelection({ kind: "path", id: Number(edge.id) }), []);
   const onPaneClick = useCallback(() => setSelection(null), []);
@@ -187,6 +163,7 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
                   nodes={nodes}
                   edges={edges}
                   nodeTypes={nodeTypes}
+                  edgeTypes={edgeTypes}
                   onNodesChange={onNodesChange}
                   onNodeDragStop={onNodeDragStop}
                   onConnect={onConnect}
@@ -197,13 +174,17 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
                   nodesDraggable={canEdit}
                   nodesConnectable={canEdit}
                   deleteKeyCode={null}
-                  minZoom={0.2}
+                  minZoom={0.1}
                   fitView
-                />
+                >
+                  {/* A 5 m grid, like the Live Simulation plan. */}
+                  <Background variant={BackgroundVariant.Lines} gap={PX_PER_METRE * 5} color="#E2E8F0" />
+                </ReactFlow>
               )}
           </div>
           <p className="sm mb-0">
-            Numbers are path lengths in metres. Stairs and ramps are yellow, exits green, blocked places red.
+            Rooms are drawn at their size in metres (or a size from their type); a grid square is 5 m. Numbers are
+            path lengths in metres. Stairs and ramps are yellow, exits green, evacuation lifts green-edged, blocked places red.
             {canEdit && " Drag a place to move it; drag from its dot to another place to add a path."}
           </p>
           {moveError !== null && <p role="alert" className="field-error">Moving was not saved: {describeError(moveError)}</p>}
@@ -285,9 +266,9 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
       <Dialog open={open?.kind === "add-place"} title="Add place" onClose={close}>
         {open?.kind === "add-place" && (
           <>
-            <p className="sm mt-0">It appears to the right of the plan; drag it into position.</p>
-            <PlaceForm floorId={floor.id} position={newPlacePosition(places)}
-                       onSaved={(saved) => { setNodes((c) => [...c, toFlowNode(saved)]); setSelection({ kind: "place", id: saved.id }); close(); }}
+            <p className="sm mt-0">It appears 20 m to the right of the plan; drag it into position.</p>
+            <PlaceForm floorId={floor.id} position={newPlacePosition(places, 20 * drawingScale(places, paths).scale)}
+                       onSaved={(saved) => { redraw([...places, saved], paths); setSelection({ kind: "place", id: saved.id }); close(); }}
                        onCancel={close} />
           </>
         )}
@@ -295,7 +276,7 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
       <Dialog open={open?.kind === "add-path"} title="Add path" onClose={close}>
         {open?.kind === "add-path" && (
           <PathForm fromId={open.from} toId={open.to} label={`${placeName(open.from)} – ${placeName(open.to)}`}
-                    onSaved={(saved) => { setPaths((c) => [...c, saved]); setSelection({ kind: "path", id: saved.id }); close(); }}
+                    onSaved={(saved) => { const next = [...paths, saved]; setPaths(next); redraw(places, next); setSelection({ kind: "path", id: saved.id }); close(); }}
                     onCancel={close} />
         )}
       </Dialog>
@@ -304,8 +285,9 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
           <DeleteConfirm what={`the place “${open.place.name}” and its paths`} path={`/nodes/${open.place.id}`} onCancel={close}
             onDeleted={() => {
               const id = open.place.id;
-              setNodes((c) => c.filter((n) => n.id !== String(id)));
-              setPaths((c) => c.filter((p) => p.from_node_id !== id && p.to_node_id !== id));
+              const nextPaths = paths.filter((p) => p.from_node_id !== id && p.to_node_id !== id);
+              setPaths(nextPaths);
+              redraw(places.filter((p) => p.id !== id), nextPaths);
               setSelection(null);
               close();
             }} />
@@ -315,7 +297,14 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
         {open?.kind === "delete-path" && (
           <DeleteConfirm what={`the path ${placeName(open.path.from_node_id)} – ${placeName(open.path.to_node_id)}`}
             path={`/edges/${open.path.id}`} onCancel={close}
-            onDeleted={() => { const id = open.path.id; setPaths((c) => c.filter((p) => p.id !== id)); setSelection(null); close(); }} />
+            onDeleted={() => {
+              const id = open.path.id;
+              const nextPaths = paths.filter((p) => p.id !== id);
+              setPaths(nextPaths);
+              redraw(places, nextPaths);
+              setSelection(null);
+              close();
+            }} />
         )}
       </Dialog>
     </>

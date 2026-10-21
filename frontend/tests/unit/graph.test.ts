@@ -1,15 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hazardName, isVertical, newPlacePosition, parseNumber, placeColour, roundPosition } from "../../src/lib/shared/graph.ts";
-
-test("colours follow the design: blocked, exits, stairs/ramps/lifts, wards/ICU, others", () => {
-  assert.equal(placeColour("exit", false), "#BFE8D0");
-  assert.equal(placeColour("exit", true), "#F9C5C5");
-  assert.equal(placeColour("stair", false), "#FCE9B2");
-  assert.equal(placeColour("lift", false), "#FCE9B2");
-  assert.equal(placeColour("icu", false), "#D6E9F8");
-  assert.equal(placeColour("corridor", false), "#FFFFFF");
-});
+import { hazardName, isVertical, newPlacePosition, parseNumber, roundPosition } from "../../src/lib/shared/graph.ts";
 
 test("only stairs, ramps and lifts link floors", () => {
   assert.ok(isVertical("stair") && isVertical("ramp") && isVertical("lift"));

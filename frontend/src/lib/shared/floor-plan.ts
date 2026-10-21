@@ -75,6 +75,19 @@ export function unitsPerMetre(places: PlanPlace[], paths: PlanPath[]): number | 
 }
 
 /** Distance from each place to its nearest other place (Infinity if alone). */
+/**
+ * Drawing units per metre for a floor: measured from its paths when they
+ * can tell, else a guess that the floor is about 60 m across.
+ */
+export function drawingScale(places: PlanPlace[], paths: PlanPath[]): { scale: number; measured: boolean } {
+  const measured = unitsPerMetre(places, paths);
+  if (measured !== null) return { scale: measured, measured: true };
+  const xs = places.map((p) => p.x);
+  const ys = places.map((p) => p.y);
+  const extent = places.length ? Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) : 0;
+  return { scale: extent > 0 ? extent / 60 : 1, measured: false };
+}
+
 function nearestDistances(places: PlanPlace[]): Map<number, number> {
   const out = new Map<number, number>();
   for (const a of places) {
@@ -160,7 +173,7 @@ function overlap(a0: number, a1: number, b0: number, b1: number): [number, numbe
 }
 
 /** The two doors of a path: straight across when the rooms face each other, else on the line between centres. */
-function doorsBetween(a: Box, b: Box): [Point, Point] {
+export function doorsBetween(a: Box, b: Box): [Point, Point] {
   const xs = overlap(a.cx - a.w / 2, a.cx + a.w / 2, b.cx - b.w / 2, b.cx + b.w / 2);
   const ys = overlap(a.cy - a.h / 2, a.cy + a.h / 2, b.cy - b.h / 2, b.cy + b.h / 2);
   if (xs && !ys) {
@@ -411,4 +424,24 @@ export function labelSize(text: string, box: Box, max: number, min: number): num
   const byWidth = (box.w * 0.9) / Math.max(text.length * LETTER, 1);
   const byHeight = box.h * 0.32;
   return Math.max(min, Math.min(max, byWidth, byHeight));
+}
+
+// --- Graph Builder canvas (React Flow works in screen pixels) -------------------------------
+
+/** Pixels per metre on the Graph Builder canvas at zoom 1. */
+export const PX_PER_METRE = 12;
+
+/** A place's rectangle on the canvas: top-left corner and size in pixels. */
+export function canvasRect(box: Box, pxPerUnit: number): { x: number; y: number; width: number; height: number } {
+  return {
+    x: (box.cx - box.w / 2) * pxPerUnit,
+    y: (box.cy - box.h / 2) * pxPerUnit,
+    width: box.w * pxPerUnit,
+    height: box.h * pxPerUnit,
+  };
+}
+
+/** Back from the canvas: a place's centre (x, y) in drawing units, from where it was dropped. */
+export function centreFromCanvas(topLeft: Point, size: { width: number; height: number }, pxPerUnit: number): Point {
+  return { x: (topLeft.x + size.width / 2) / pxPerUnit, y: (topLeft.y + size.height / 2) / pxPerUnit };
 }

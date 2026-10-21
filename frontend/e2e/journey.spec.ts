@@ -143,6 +143,9 @@ test("Graph Builder shows the imported places", async () => {
   for (const place of ["ICU", "WardA", "C1", "C2", "E1", "E2"]) {
     await expect(plan.getByText(place, { exact: true })).toBeVisible();
   }
+  // Drawn as a floor plan: passages labelled with their length, rooms sized from their type.
+  await expect(plan.getByText("14 m", { exact: true })).toBeVisible();          // ICU – C2, the only 14 m path
+  await expect(plan.locator('[title="ICU · icu · size from its type"]')).toHaveCount(1);
 
   // A size in metres for the floor plan: saved, then shown in the list of places.
   const places = page.getByRole("table", { name: "Places" });
@@ -155,6 +158,7 @@ test("Graph Builder shows the imported places", async () => {
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(places.getByRole("row").filter({ has: page.getByRole("cell", { name: "ICU", exact: true }) })
     .getByRole("cell", { name: "12 × 10.5 m" })).toBeVisible();
+  await expect(plan.locator('[title="ICU · icu · 12 × 10.5 m"]')).toHaveCount(1);   // the room is redrawn at its size
 });
 
 test("Patients & Staff: a CSV file is checked first, then saved; Export gives it back", async () => {
