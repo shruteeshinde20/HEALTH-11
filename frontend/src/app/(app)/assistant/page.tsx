@@ -37,7 +37,7 @@ function Assistant() {
 
   return (
     <>
-      <PageHeader title="AI Assistant" subtitle="Describe an emergency in your own words, or get a run explained." />
+      <PageHeader title="AI Assistant" subtitle="Describe the emergency in your own words." />
       {canDraft ? (
         <>
           {error !== null && <ErrorState error={error} onRetry={reload} />}

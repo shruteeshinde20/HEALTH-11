@@ -23,7 +23,7 @@ export default function SettingsPage() {
   const user = useUser();
   return (
     <>
-      <PageHeader title="Settings / Profile" subtitle="Your account, and the numbers the simulations use." />
+      <PageHeader title="Settings / Profile" subtitle="Your details and simulation speeds." />
       <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-[14px]">
         <Profile user={user} />
         <PasswordChange />

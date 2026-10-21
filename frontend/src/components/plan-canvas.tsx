@@ -18,7 +18,7 @@ import {
 } from "@/lib/shared/floor-plan.ts";
 import { formatSize } from "@/lib/shared/place-size.ts";
 
-import { INK, PASSAGE, ROOM_FILL } from "./floor-plan.tsx";
+import { BLOCKED, EVACUATION_LIFT_FILL, INK, OUTLINE, PASSAGE, PATH, ROOM_FILL } from "./floor-plan.tsx";
 
 export type PlaceNode = Node<{ place: GraphNode; sized: boolean }, "place">;
 export type OutlineNode = Node<Record<string, never>, "outline">;
@@ -79,7 +79,7 @@ export function buildCanvasEdges(paths: GraphEdge[], selectedId: number | null):
 // --- Views ---------------------------------------------------------------------------------
 
 export function OutlineNodeView() {
-  return <div className="h-full w-full bg-white" style={{ border: `5px solid ${INK}` }} aria-hidden="true" />;
+  return <div className="h-full w-full bg-white" style={{ border: `4px solid ${INK}` }} aria-hidden="true" />;
 }
 
 export function PlaceNodeView({ data, selected }: NodeProps<PlaceNode>) {
@@ -91,36 +91,31 @@ export function PlaceNodeView({ data, selected }: NodeProps<PlaceNode>) {
                  place.is_blocked ? "blocked" : null, evacuation ? "evacuation lift" : null].filter(Boolean).join(" · ");
   const exit = type === "exit";
   const outdoor = OUTDOOR_TYPES.has(type);
-  const corridor = type === "corridor";
-  const ring = selected ? "0 0 0 3px #5FA3D9" : undefined;
   return (
     <div
       title={title}
       className={`relative flex h-full w-full items-start justify-center overflow-visible ${outdoor ? "rounded-full" : "rounded-[3px]"}`}
       style={{
-        background: place.is_blocked
-          ? "repeating-linear-gradient(45deg, #FEE2E2 0 6px, #FCA5A5 6px 9px)"
-          : type === "stair" ? `repeating-linear-gradient(0deg, ${ROOM_FILL.stair} 0 5px, #E7C988 5px 6px)`
-          : ROOM_FILL[type] ?? "#FFFFFF",
-        border: outdoor ? "2px dashed #16A34A"
-          : evacuation ? "3px solid #16A34A"
-          : exit ? "1.5px solid #166534"
-          : corridor ? "1px solid #CBD5E1" : `2.5px solid ${INK}`,
-        boxShadow: ring,
+        // As the preview's floor graph: blocked #F9C5C5, the type's colour, outline
+        // #94A3B8, and a 2.5 px ink outline when selected.
+        background: place.is_blocked ? BLOCKED
+          : type === "stair" ? `repeating-linear-gradient(0deg, ${ROOM_FILL.stair} 0 5px, ${OUTLINE} 5px 6px)`
+          : evacuation ? EVACUATION_LIFT_FILL : ROOM_FILL[type] ?? "#FFFFFF",
+        border: selected ? `2.5px solid ${INK}` : `1.2px ${outdoor ? "dashed" : "solid"} ${OUTLINE}`,
       }}
     >
       {type === "lift" && (
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 10 10" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M 1 1 L 9 9 M 9 1 L 1 9" stroke={evacuation ? "#16A34A" : "#94A3B8"} strokeWidth="0.6" vectorEffect="non-scaling-stroke" />
+          <path d="M 1 1 L 9 9 M 9 1 L 1 9" stroke={evacuation ? INK : OUTLINE} strokeWidth="1" vectorEffect="non-scaling-stroke" />
         </svg>
       )}
       {exit && (
         <svg className="absolute inset-0 m-auto h-[70%] w-[70%]" viewBox="0 0 10 10" aria-hidden="true">
-          <path d="M 1.5 5 L 7.5 5 M 5 2 L 8 5 L 5 8" fill="none" stroke="#FFFFFF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M 1.5 5 L 7.5 5 M 5 2 L 8 5 L 5 8" fill="none" stroke={INK} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}
       <span
-        className={`pointer-events-none z-10 whitespace-nowrap px-1 text-[11px] font-semibold leading-tight ${exit ? "absolute top-full mt-0.5 text-[#166534]" : "mt-0.5 text-ink"}`}
+        className={`pointer-events-none z-10 whitespace-nowrap px-1 text-[11px] leading-tight text-tx ${exit ? "absolute top-full mt-0.5" : "mt-0.5"}`}
         style={{ textShadow: "0 0 3px #fff, 0 0 3px #fff" }}
       >
         {place.name}
@@ -145,20 +140,21 @@ export function PassageEdgeView({ id, source, target, data, selected }: EdgeProp
   const [doorA, doorB] = doorsBetween(boxA, boxB);
   const apart = (doorB.x - doorA.x) * (boxB.cx - boxA.cx) + (doorB.y - doorA.y) * (boxB.cy - boxA.cy) > 0;
   const { path, widthPx } = data;
-  const colour = path.is_blocked ? "#DC2626" : selected ? "#5FA3D9" : apart ? PASSAGE : "#94A3B8";
+  // As the preview: paths #CBD5E1, the selected one #5FA3D9; blocked paths dashed red as before.
+  const colour = path.is_blocked ? "#DC2626" : selected ? "#5FA3D9" : apart ? PASSAGE : PATH;
   // Rooms that touch share a door: a short dashed mark between their centres keeps the path clickable.
   const d = apart ? `M ${doorA.x} ${doorA.y} L ${doorB.x} ${doorB.y}` : `M ${boxA.cx} ${boxA.cy} L ${boxB.cx} ${boxB.cy}`;
   const mid = { x: (doorA.x + doorB.x) / 2, y: (doorA.y + doorB.y) / 2 };
   return (
     <>
-      {apart && <BaseEdge id={`${id}-wall`} path={d} style={{ stroke: "#CBD5E1", strokeWidth: widthPx + 3 }} interactionWidth={0} />}
+      {apart && <BaseEdge id={`${id}-wall`} path={d} style={{ stroke: PATH, strokeWidth: widthPx + 3 }} interactionWidth={0} />}
       <BaseEdge id={id} path={d} interactionWidth={Math.max(widthPx, 16)}
                 style={{
                   stroke: colour, strokeWidth: apart ? widthPx : selected ? 3 : 1.5,
                   strokeDasharray: path.is_blocked || !apart ? "6 4" : undefined,
                 }} />
       <EdgeLabelRenderer>
-        <div className="nodrag nopan pointer-events-none absolute rounded bg-white/90 px-1 text-[10px] text-tx"
+        <div className="nodrag nopan pointer-events-none absolute rounded bg-white/90 px-1 text-[11px] text-[#94A3B8]"
              style={{ transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)` }}>
           {path.distance} m
         </div>

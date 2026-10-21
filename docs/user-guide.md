@@ -126,7 +126,7 @@ and your staff. **Who to evacuate first** ranks patients with a transparent
 score (see the AI section). **Import CSV** replaces the whole list with a file:
 it first shows what would be added, changed and removed, and saves nothing
 until you choose **Apply changes**. **Export CSV** downloads the list.
-**Test data** marks made-up records.
+**Synthetic** marks made-up records.
 
 ### AI Assistant
 - **Describe an emergency**: type what is happening in your own words (for

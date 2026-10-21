@@ -29,7 +29,7 @@ export default function ReportsPage() {
   const scenarios = useAll<Scenario>("/scenarios");
   return (
     <>
-      <PageHeader title="Reports & History" subtitle="Every saved simulation, its reports, and what the data says." />
+      <PageHeader title="Reports & History" subtitle="Every run is saved and can be downloaded." />
       <History scenarios={scenarios.data ?? []} />
       <div className="mt-[14px] grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-[14px]">
         {user.role !== "Staff User" && <PredictorCard scenarios={scenarios.data} />}

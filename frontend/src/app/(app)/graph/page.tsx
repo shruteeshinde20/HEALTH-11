@@ -183,8 +183,7 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
               )}
           </div>
           <p className="sm mb-0">
-            Rooms are drawn at their size in metres (or a size from their type); a grid square is 5 m. Numbers are
-            path lengths in metres. Stairs and ramps are yellow, exits green, evacuation lifts green-edged, blocked places red.
+            Numbers are path lengths in metres. Stairs and ramps are yellow, exits green, blocked places red.
             {canEdit && " Drag a place to move it; drag from its dot to another place to add a path."}
           </p>
           {moveError !== null && <p role="alert" className="field-error">Moving was not saved: {describeError(moveError)}</p>}
@@ -266,7 +265,7 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
       <Dialog open={open?.kind === "add-place"} title="Add place" onClose={close}>
         {open?.kind === "add-place" && (
           <>
-            <p className="sm mt-0">It appears 20 m to the right of the plan; drag it into position.</p>
+            <p className="sm mt-0">It appears to the right of the plan; drag it into position.</p>
             <PlaceForm floorId={floor.id} position={newPlacePosition(places, 20 * drawingScale(places, paths).scale)}
                        onSaved={(saved) => { redraw([...places, saved], paths); setSelection({ kind: "place", id: saved.id }); close(); }}
                        onCancel={close} />

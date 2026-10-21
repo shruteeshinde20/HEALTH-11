@@ -35,14 +35,14 @@ function Admin() {
   if (user.role !== "Administrator") {
     return (
       <>
-        <PageHeader title="Admin" subtitle="Users and audit log." />
+        <PageHeader title="Admin" subtitle="Users, roles and the audit log." />
         <Card><EmptyState>Only Administrators can manage users and read the audit log.</EmptyState></Card>
       </>
     );
   }
   return (
     <>
-      <PageHeader title="Admin" subtitle="Users and audit log of your organization." />
+      <PageHeader title="Admin" subtitle="Users, roles and the audit log." />
       <div className="mb-[14px] flex flex-wrap gap-2" role="group" aria-label="Show">
         {(["users", "audit"] as const).map((key) => (
           <button key={key} type="button" className={key === tab ? "btn" : "btn l"} aria-pressed={key === tab}

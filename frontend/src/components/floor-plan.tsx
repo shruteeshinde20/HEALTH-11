@@ -17,19 +17,27 @@ import {
 } from "@/lib/shared/floor-plan.ts";
 import { MOBILITY_LABELS, type HazardSpot, type Position } from "@/lib/shared/live.ts";
 
-// Light theme (PROJECT.md "Design"): tints of the design colours.
+// Colours: only the design's (PROJECT.md "Design", docs/design/preview.html):
+// places as in the preview's floor graph (wards and ICU #D6E9F8, stairs and
+// ramps #FCE9B2, exits #BFE8D0, blocked #F9C5C5, others white, outline
+// #94A3B8, paths #CBD5E1, text #334155), plus the colours the live map already
+// used for people, queues (#EA580C) and blocked paths (#DC2626).
 export const INK = "#1E3A5F";
+export const TEXT = "#334155";
+export const TEXT2 = "#64748B";
+export const OUTLINE = "#94A3B8";
+export const PATH = "#CBD5E1";
+export const BLOCKED = "#F9C5C5";
 export const ROOM_FILL: Record<string, string> = {
-  ward: "#E3F0FB", icu: "#EDE7FB", room: "#FFFFFF", corridor: "#EEF2F7", stair: "#FDF3D3",
-  ramp: "#FDF3D3", lift: "#E7ECF3", exit: "#16A34A", assembly: "#DCF5E7",
+  ward: "#D6E9F8", icu: "#D6E9F8", room: "#FFFFFF", corridor: "#FFFFFF", stair: "#FCE9B2",
+  ramp: "#FCE9B2", lift: "#FCE9B2", exit: "#BFE8D0", assembly: "#BFE8D0",
 };
-export const PASSAGE = "#EEF2F7";
+/** Evacuation lifts: the success colour, as their "Evacuation lift" tag. */
+export const EVACUATION_LIFT_FILL = "#BFE8D0";
+export const PASSAGE = "#F8FAFC";
 export const PERSON_COLOURS = {
-  ambulatory: "#2563EB", wheelchair: "#7C3AED", stretcher: "#C2410C", ventilator: "#BE185D", staff: "#0F766E",
+  ambulatory: "#2563EB", wheelchair: "#7C3AED", stretcher: "#C2410C", ventilator: "#BE185D", staff: INK,
 } as const;
-const HAZARD_LABEL: Record<string, string> = {
-  fire: "fire", smoke: "smoke", hazmat: "hazardous material", structural: "structural damage",
-};
 
 type Props = {
   places: PlanPlace[];
@@ -57,32 +65,32 @@ export function FloorPlan({ places, paths, label, people = [], hazards = [], blo
 
   return (
     <svg role="img" aria-label={label} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
-         className={className ?? "h-[460px] w-full rounded-lg border border-line bg-[#F4F7FA]"}>
+         className={className ?? "h-[460px] w-full rounded-lg border border-line bg-page"}>
       <defs>
         <pattern id={id("grid")} width={s * 5} height={s * 5} patternUnits="userSpaceOnUse">
           <path d={`M ${s * 5} 0 L 0 0 0 ${s * 5}`} fill="none" stroke="#E2E8F0" strokeWidth={s * 0.06} />
         </pattern>
         <pattern id={id("blocked")} width={s * 1.2} height={s * 1.2} patternUnits="userSpaceOnUse"
                  patternTransform="rotate(45)">
-          <rect width={s * 0.45} height={s * 1.2} fill="#DC2626" opacity="0.45" />
+          <rect width={s * 1.2} height={s * 1.2} fill={BLOCKED} />
+          <rect width={s * 0.35} height={s * 1.2} fill="#DC2626" opacity="0.5" />
         </pattern>
         <pattern id={id("structural")} width={s * 1.6} height={s * 1.6} patternUnits="userSpaceOnUse"
                  patternTransform="rotate(-35)">
-          <rect width={s * 1.6} height={s * 1.6} fill="#D6A77A" opacity="0.45" />
-          <rect width={s * 0.35} height={s * 1.6} fill="#92400E" opacity="0.6" />
+          <rect width={s * 1.6} height={s * 1.6} fill="#F8FAFC" opacity="0.8" />
+          <rect width={s * 0.35} height={s * 1.6} fill={TEXT2} opacity="0.7" />
         </pattern>
         <radialGradient id={id("fire")}>
-          <stop offset="0%" stopColor="#FDE047" stopOpacity="0.95" />
-          <stop offset="45%" stopColor="#F97316" stopOpacity="0.8" />
-          <stop offset="100%" stopColor="#DC2626" stopOpacity="0.45" />
+          <stop offset="0%" stopColor={BLOCKED} stopOpacity="1" />
+          <stop offset="100%" stopColor={BLOCKED} stopOpacity="0.75" />
         </radialGradient>
         <radialGradient id={id("smoke")}>
-          <stop offset="0%" stopColor="#475569" stopOpacity="0.75" />
-          <stop offset="100%" stopColor="#94A3B8" stopOpacity="0.35" />
+          <stop offset="0%" stopColor={TEXT2} stopOpacity="0.6" />
+          <stop offset="100%" stopColor={OUTLINE} stopOpacity="0.3" />
         </radialGradient>
         <radialGradient id={id("hazmat")}>
-          <stop offset="0%" stopColor="#BEF264" stopOpacity="0.85" />
-          <stop offset="100%" stopColor="#65A30D" stopOpacity="0.4" />
+          <stop offset="0%" stopColor="#FCE9B2" stopOpacity="1" />
+          <stop offset="100%" stopColor="#FCE9B2" stopOpacity="0.8" />
         </radialGradient>
       </defs>
 
@@ -103,11 +111,11 @@ export function FloorPlan({ places, paths, label, people = [], hazards = [], blo
           <g key={way.id}>
             {/* A passage: grey side walls, then its floor on top. */}
             {open && <line x1={way.from.x} y1={way.from.y} x2={way.to.x} y2={way.to.y}
-                           stroke="#CBD5E1" strokeWidth={way.width + s * 0.24} />}
+                           stroke={PATH} strokeWidth={way.width + s * 0.24} />}
             {open && <line x1={way.from.x} y1={way.from.y} x2={way.to.x} y2={way.to.y}
                            stroke={PASSAGE} strokeWidth={way.width} />}
             {busy && <line x1={way.doorA.x} y1={way.doorA.y} x2={way.doorB.x} y2={way.doorB.y}
-                           stroke="#F97316" strokeOpacity="0.7" strokeWidth={Math.max(way.width * 0.6, s * 0.6)}
+                           stroke="#EA580C" strokeOpacity="0.7" strokeWidth={Math.max(way.width * 0.6, s * 0.6)}
                            strokeLinecap="round" />}
             {isBlocked && <line x1={way.doorA.x} y1={way.doorA.y} x2={way.doorB.x} y2={way.doorB.y}
                                 stroke="#DC2626" strokeWidth={s * 0.3} strokeDasharray={`${s * 0.8} ${s * 0.5}`} />}
@@ -153,14 +161,16 @@ export function FloorPlan({ places, paths, label, people = [], hazards = [], blo
           const fill = kind === "structural" ? `url(#${id("structural")})` : `url(#${id(kind)})`;
           return (
             <rect key={spot.node_id} {...rect} rx={s * 1.2} fill={fill}
+                  stroke={kind === "fire" ? "#DC2626" : kind === "hazmat" ? "#EA580C" : kind === "structural" ? TEXT2 : "none"}
+                  strokeWidth={s * 0.25}
                   className={kind === "fire" ? "plan-fire" : kind === "smoke" ? "plan-smoke" : undefined}>
-              <title>{`${name}: ${spot.types.map((t) => HAZARD_LABEL[t] ?? t).join(", ")}`}</title>
+              <title>{`${name}: ${spot.types.join(", ")}`}</title>
             </rect>
           );
         }
         if (spot.risk <= 0) return null;
         return (
-          <rect key={spot.node_id} {...rect} rx={s * 1.2} fill="#FDBA74" fillOpacity={0.15 + spot.risk * 0.35}
+          <rect key={spot.node_id} {...rect} rx={s * 1.2} fill="#FCE9B2" fillOpacity={0.3 + spot.risk * 0.5}
                 stroke="#EA580C" strokeWidth={s * 0.2} strokeDasharray={`${s * 0.7} ${s * 0.45}`} className="plan-coming">
             <title>{`${name}: a hazard is coming`}</title>
           </rect>
@@ -185,7 +195,7 @@ export function FloorPlan({ places, paths, label, people = [], hazards = [], blo
         const exit = place.type === "exit";
         return (
           <text key={`label-${place.id}`} x={label.x} y={label.y} textAnchor={label.anchor} fontSize={label.size}
-                fill={exit ? "#166534" : INK} fontWeight={600}
+                fill={TEXT}
                 paintOrder="stroke" stroke="#FFFFFF" strokeWidth={label.size * 0.25} strokeOpacity={label.inside ? 0.6 : 0.9}>
             {place.name}
           </text>
@@ -240,8 +250,8 @@ function layout(places: PlanPlace[], paths: PlanPath[]) {
 function Place({ place, box, s, sized }: { place: PlanPlace; box: Box; s: number; sized: boolean }) {
   const x = box.cx - box.w / 2;
   const y = box.cy - box.h / 2;
-  const fill = ROOM_FILL[place.type] ?? "#FFFFFF";
   const evacuation = place.type === "lift" && place.is_evacuation_lift;
+  const fill = evacuation ? EVACUATION_LIFT_FILL : ROOM_FILL[place.type] ?? "#FFFFFF";
   const title = [
     place.name, place.type,
     sized ? `${place.width_m} × ${place.length_m} m` : null,
@@ -254,7 +264,7 @@ function Place({ place, box, s, sized }: { place: PlanPlace; box: Box; s: number
       <g>
         <title>{title}</title>
         <rect x={x} y={y} width={box.w} height={box.h} rx={Math.min(box.w, box.h) / 2} fill={fill}
-              stroke="#16A34A" strokeWidth={s * 0.2} strokeDasharray={`${s * 0.8} ${s * 0.5}`} />
+              stroke={OUTLINE} strokeWidth={s * 0.15} strokeDasharray={`${s * 0.8} ${s * 0.5}`} />
       </g>
     );
   }
@@ -263,9 +273,9 @@ function Place({ place, box, s, sized }: { place: PlanPlace; box: Box; s: number
     return (
       <g>
         <title>{title}</title>
-        <rect x={x} y={y} width={box.w} height={box.h} rx={s * 0.2} fill={fill} stroke="#166534" strokeWidth={s * 0.15} />
+        <rect x={x} y={y} width={box.w} height={box.h} rx={s * 0.2} fill={fill} stroke={OUTLINE} strokeWidth={s * 0.15} />
         <path d={`M ${box.cx - arrow} ${box.cy} L ${box.cx + arrow * 0.6} ${box.cy} M ${box.cx + arrow * 0.1} ${box.cy - arrow * 0.6} L ${box.cx + arrow * 0.7} ${box.cy} L ${box.cx + arrow * 0.1} ${box.cy + arrow * 0.6}`}
-              fill="none" stroke="#FFFFFF" strokeWidth={Math.max(s * 0.18, arrow * 0.22)} strokeLinecap="round" strokeLinejoin="round" />
+              fill="none" stroke={INK} strokeWidth={Math.max(s * 0.18, arrow * 0.22)} strokeLinecap="round" strokeLinejoin="round" />
       </g>
     );
   }
@@ -275,14 +285,14 @@ function Place({ place, box, s, sized }: { place: PlanPlace; box: Box; s: number
     <g>
       <title>{title}</title>
       <rect x={x} y={y} width={box.w} height={box.h} rx={corridor ? 0 : s * 0.15} fill={fill}
-            stroke={corridor ? "#CBD5E1" : INK} strokeWidth={corridor ? s * 0.12 : s * 0.28} />
+            stroke={OUTLINE} strokeWidth={corridor ? s * 0.12 : s * 0.22} />
       {place.type === "stair" && <Treads box={box} s={s} />}
       {place.type === "ramp" && <Chevrons box={box} s={s} />}
       {place.type === "lift" && (
-        <g stroke={evacuation ? "#16A34A" : "#94A3B8"} strokeWidth={s * (evacuation ? 0.22 : 0.12)}>
+        <g stroke={evacuation ? INK : OUTLINE} strokeWidth={s * 0.12}>
           <line x1={x + s * 0.3} y1={y + s * 0.3} x2={x + box.w - s * 0.3} y2={y + box.h - s * 0.3} />
           <line x1={x + box.w - s * 0.3} y1={y + s * 0.3} x2={x + s * 0.3} y2={y + box.h - s * 0.3} />
-          {evacuation && <rect x={x} y={y} width={box.w} height={box.h} fill="none" strokeWidth={s * 0.3} />}
+
         </g>
       )}
     </g>
@@ -300,14 +310,14 @@ function Treads({ box, s }: { box: Box; s: number }) {
       ? <line key={at} x1={box.cx - box.w / 2} y1={box.cy - box.h / 2 + at} x2={box.cx + box.w / 2} y2={box.cy - box.h / 2 + at} />
       : <line key={at} x1={box.cx - box.w / 2 + at} y1={box.cy - box.h / 2} x2={box.cx - box.w / 2 + at} y2={box.cy + box.h / 2} />);
   }
-  return <g stroke="#B45309" strokeOpacity="0.55" strokeWidth={s * 0.08}>{lines}</g>;
+  return <g stroke={OUTLINE} strokeWidth={s * 0.08}>{lines}</g>;
 }
 
 /** Ramp: arrows pointing down the slope. */
 function Chevrons({ box, s }: { box: Box; s: number }) {
   const size = Math.min(box.w, box.h) * 0.22;
   return (
-    <g fill="none" stroke="#B45309" strokeOpacity="0.6" strokeWidth={s * 0.12} strokeLinecap="round">
+    <g fill="none" stroke={OUTLINE} strokeWidth={s * 0.12} strokeLinecap="round">
       {[-1, 0, 1].map((k) => (
         <path key={k} d={`M ${box.cx - size} ${box.cy + k * size * 1.3 - size * 0.5} L ${box.cx} ${box.cy + k * size * 1.3 + size * 0.3} L ${box.cx + size} ${box.cy + k * size * 1.3 - size * 0.5}`} />
       ))}

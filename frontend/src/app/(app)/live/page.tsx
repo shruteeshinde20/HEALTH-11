@@ -10,7 +10,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import { Field, FormError } from "@/components/facility-forms.tsx";
-import { FloorPlan, PERSON_COLOURS } from "@/components/floor-plan.tsx";
+import {
+  BLOCKED, EVACUATION_LIFT_FILL, FloorPlan, INK, OUTLINE, PERSON_COLOURS, TEXT2,
+} from "@/components/floor-plan.tsx";
 import { RunResult } from "@/components/run-result.tsx";
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader, Tag } from "@/components/ui.tsx";
 import { apiRequest } from "@/lib/client/api.ts";
@@ -23,7 +25,7 @@ import type { Floor, HazardType, Page, RunDetail, RunSummary, Scenario } from "@
 import { algorithmLabel, formatDateTime } from "@/lib/shared/format.ts";
 import { hazardName, parseNumber } from "@/lib/shared/graph.ts";
 import {
-  STREAM_SPEEDS, clock, exitLoadRows, mapFloors,
+  MOBILITY_LABELS, STREAM_SPEEDS, clock, exitLoadRows, mapFloors,
   type LiveFrame, type RunMap,
 } from "@/lib/shared/live.ts";
 import { SAFETY_NOTICE, pageFor } from "@/lib/shared/pages.ts";
@@ -217,28 +219,31 @@ function FloorMap({ map, floorId, frame, label, stepMs }: {
 }
 
 function Legend() {
-  const people: [string, ReactNode][] = [
-    ["Walking patient", <circle key="i" cx="8" cy="8" r="5.5" fill={PERSON_COLOURS.ambulatory} stroke="#fff" strokeWidth="1.4" />],
-    ["Wheelchair", <g key="i"><circle cx="8" cy="8" r="5.5" fill={PERSON_COLOURS.wheelchair} stroke="#fff" strokeWidth="1.4" />
-      <circle cx="8" cy="8" r="2.7" fill="none" stroke="#fff" strokeWidth="1.1" /></g>],
-    ["Stretcher", <rect key="i" x="1.5" y="4.5" width="13" height="7" rx="2" fill={PERSON_COLOURS.stretcher} stroke="#fff" strokeWidth="1.2" />],
-    ["Ventilator", <g key="i"><rect x="1.5" y="4.5" width="13" height="7" rx="2" fill={PERSON_COLOURS.ventilator} stroke="#fff" strokeWidth="1.2" />
-      <path d="M 5.5 8 L 10.5 8 M 8 5.8 L 8 10.2" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" /></g>],
-    ["Staff", <g key="i"><circle cx="8" cy="8" r="5.5" fill={PERSON_COLOURS.staff} stroke="#fff" strokeWidth="1.4" />
-      <circle cx="8" cy="8" r="1.8" fill="#fff" /></g>],
-    ["Needs help or reached by the hazard", <circle key="i" cx="8" cy="8" r="5" fill="#fff" stroke="#1E3A5F" strokeWidth="1.5" />],
+  const white = "#FFFFFF";
+  const mobility: [string, ReactNode][] = [
+    [MOBILITY_LABELS.ambulatory!, <circle key="i" cx="8" cy="8" r="5.5" fill={PERSON_COLOURS.ambulatory} stroke={white} strokeWidth="1.4" />],
+    [MOBILITY_LABELS.wheelchair!, <g key="i"><circle cx="8" cy="8" r="5.5" fill={PERSON_COLOURS.wheelchair} stroke={white} strokeWidth="1.4" />
+      <circle cx="8" cy="8" r="2.7" fill="none" stroke={white} strokeWidth="1.1" /></g>],
+    [MOBILITY_LABELS.stretcher!, <rect key="i" x="1.5" y="4.5" width="13" height="7" rx="2" fill={PERSON_COLOURS.stretcher} stroke={white} strokeWidth="1.2" />],
+    [MOBILITY_LABELS.ventilator!, <g key="i"><rect x="1.5" y="4.5" width="13" height="7" rx="2" fill={PERSON_COLOURS.ventilator} stroke={white} strokeWidth="1.2" />
+      <path d="M 5.5 8 L 10.5 8 M 8 5.8 L 8 10.2" stroke={white} strokeWidth="1.2" strokeLinecap="round" /></g>],
+    ["Staff", <g key="i"><circle cx="8" cy="8" r="5.5" fill={PERSON_COLOURS.staff} stroke={white} strokeWidth="1.4" />
+      <circle cx="8" cy="8" r="1.8" fill={white} /></g>],
+    ["Waiting for help or reached by the hazard", <circle key="i" cx="8" cy="8" r="5" fill={white} stroke={INK} strokeWidth="1.5" />],
   ];
+  // Hazard names as in the Scenario Builder (preview: Fire, Smoke, Hazmat, Structural).
   const map: [string, ReactNode][] = [
-    ["Fire", <rect key="i" x="1" y="3" width="14" height="10" rx="3" fill="#F97316" />],
-    ["Smoke", <rect key="i" x="1" y="3" width="14" height="10" rx="3" fill="#64748B" opacity="0.7" />],
-    ["Chemical spill", <rect key="i" x="1" y="3" width="14" height="10" rx="3" fill="#84CC16" />],
-    ["Hazard coming", <rect key="i" x="1.5" y="3.5" width="13" height="9" rx="3" fill="#FDBA74" fillOpacity="0.5" stroke="#EA580C" strokeDasharray="2.5 1.5" />],
-    ["Blocked", <g key="i"><rect x="1" y="3" width="14" height="10" fill="#FEE2E2" stroke="#DC2626" />
-      <path d="M 3 13 L 13 3 M -1 9 L 5 3 M 9 13 L 15 7" stroke="#DC2626" strokeOpacity="0.6" strokeWidth="1.5" /></g>],
-    ["Queue", <line key="i" x1="1" y1="8" x2="15" y2="8" stroke="#F97316" strokeWidth="4" strokeLinecap="round" />],
-    ["Exit", <rect key="i" x="3" y="3" width="10" height="10" rx="1" fill="#16A34A" />],
-    ["Evacuation lift", <g key="i"><rect x="3" y="3" width="10" height="10" fill="#E7ECF3" stroke="#16A34A" strokeWidth="1.5" />
-      <path d="M 4.5 4.5 L 11.5 11.5 M 11.5 4.5 L 4.5 11.5" stroke="#16A34A" strokeWidth="1.2" /></g>],
+    ["Fire", <rect key="i" x="1.5" y="3.5" width="13" height="9" rx="3" fill={BLOCKED} stroke="#DC2626" />],
+    ["Smoke", <rect key="i" x="1.5" y="3.5" width="13" height="9" rx="3" fill={TEXT2} opacity="0.5" />],
+    ["Hazmat", <rect key="i" x="1.5" y="3.5" width="13" height="9" rx="3" fill="#FCE9B2" stroke="#EA580C" />],
+    ["Structural", <g key="i"><rect x="1.5" y="3.5" width="13" height="9" rx="3" fill="#F8FAFC" stroke={TEXT2} />
+      <path d="M 4 12 L 9 4 M 8 12 L 13 4" stroke={TEXT2} strokeWidth="1.3" /></g>],
+    ["Hazard coming", <rect key="i" x="1.5" y="3.5" width="13" height="9" rx="3" fill="#FCE9B2" stroke="#EA580C" strokeDasharray="2.5 1.5" />],
+    ["Queue at this path", <line key="i" x1="1" y1="8" x2="15" y2="8" stroke="#EA580C" strokeWidth="4" strokeLinecap="round" />],
+    ["Blocked by a hazard", <g key="i"><rect x="1.5" y="3.5" width="13" height="9" fill={BLOCKED} stroke="#DC2626" />
+      <path d="M 3 12.5 L 12 3.5 M 8 12.5 L 14 6.5" stroke="#DC2626" strokeOpacity="0.6" strokeWidth="1.3" /></g>],
+    ["Evacuation lift", <g key="i"><rect x="3" y="3" width="10" height="10" fill={EVACUATION_LIFT_FILL} stroke={OUTLINE} />
+      <path d="M 4.5 4.5 L 11.5 11.5 M 11.5 4.5 L 4.5 11.5" stroke={INK} strokeWidth="1" /></g>],
   ];
   const row = (items: [string, ReactNode][], label: string) => (
     <ul className="sm my-1 flex list-none flex-wrap gap-x-4 gap-y-1 p-0" aria-label={label}>
@@ -249,7 +254,7 @@ function Legend() {
       ))}
     </ul>
   );
-  return <div className="my-2">{row(people, "People")}{row(map, "Map")}</div>;
+  return <div className="my-2">{row(mobility, "People")}{row(map, "Map")}</div>;
 }
 
 // --- Results ------------------------------------------------------------------------------

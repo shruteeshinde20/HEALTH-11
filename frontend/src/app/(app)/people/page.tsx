@@ -47,7 +47,7 @@ function People() {
 
   return (
     <>
-      <PageHeader title="Patients & Staff" subtitle="Who is in the hospital, where they are, and who to evacuate first." />
+      <PageHeader title="Patients & Staff" subtitle="Sample records are labelled synthetic." />
       <div className="mb-[14px] flex flex-wrap gap-2" role="group" aria-label="Show">
         {TABS.map((t) => (
           <button key={t.key} type="button" className={t.key === tab ? "btn" : "btn l"} aria-pressed={t.key === tab}
@@ -140,7 +140,7 @@ function PatientList({ facility, canEdit }: { facility: Facility; canEdit: boole
             rows={shown.map((p) => ({
               key: p.id,
               cells: [
-                <span key="code">{p.patient_code}{p.is_synthetic && <> <Tag tone="w">Test data</Tag></>}</span>,
+                <span key="code">{p.patient_code}{p.is_synthetic && <> <Tag tone="w">Synthetic</Tag></>}</span>,
                 capital(p.mobility),
                 `${p.criticality} (${CRITICALITY_LABELS[p.criticality] ?? ""})`,
                 whereText(facility, p.node_id),
@@ -236,7 +236,7 @@ function PatientForm({ facility, patient, onSaved, onCancel }: {
       <PlacePicker id="patient-place" facility={facility} value={nodeId} onChange={setNodeId} error={fields.node_id} />
       <label className="flex items-center gap-2 text-tx">
         <input type="checkbox" className="w-auto" checked={synthetic} onChange={(e) => setSynthetic(e.target.checked)} />
-        Test data (not a real patient)
+        Synthetic (not a real patient)
       </label>
       <FormError error={error} />
       <Buttons busy={busy} disabled={!codes} label={patient ? "Save" : codes && codes.length > 1 ? `Add ${codes.length} patients` : "Add patient"}
@@ -281,7 +281,7 @@ function StaffList({ facility, canEdit }: { facility: Facility; canEdit: boolean
             rows={shown.map((s) => ({
               key: s.id,
               cells: [
-                <span key="name">{s.full_name}{s.is_synthetic && <> <Tag tone="w">Test data</Tag></>}</span>,
+                <span key="name">{s.full_name}{s.is_synthetic && <> <Tag tone="w">Synthetic</Tag></>}</span>,
                 s.staff_code,
                 s.role,
                 whereText(facility, s.node_id),
@@ -366,7 +366,7 @@ function StaffForm({ facility, member, onSaved, onCancel }: {
       <PlacePicker id="staff-place" facility={facility} value={nodeId} onChange={setNodeId} error={fields.node_id} />
       <label className="flex items-center gap-2 text-tx">
         <input type="checkbox" className="w-auto" checked={synthetic} onChange={(e) => setSynthetic(e.target.checked)} />
-        Test data (not a real person)
+        Synthetic (not a real person)
       </label>
       <FormError error={error} />
       <Buttons busy={busy} disabled={!complete} label={member ? "Save" : codes && codes.length > 1 ? `Add ${codes.length} staff` : "Add staff member"}
@@ -428,7 +428,7 @@ function Priority({ facility }: { facility: Facility }) {
                 key: row.patient_id,
                 cells: [
                   row.rank,
-                  <span key="p">{row.patient_code}{row.is_synthetic && <> <Tag tone="w">Test data</Tag></>}</span>,
+                  <span key="p">{row.patient_code}{row.is_synthetic && <> <Tag tone="w">Synthetic</Tag></>}</span>,
                   whereText(facility, row.node_id),
                   `${capital(row.breakdown.mobility.value)}: ${row.breakdown.mobility.points} pts`,
                   `${row.breakdown.criticality.value}: ${row.breakdown.criticality.points} pts`,
