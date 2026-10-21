@@ -6,6 +6,7 @@ speed v with 1 s ticks takes ceil(L / v) seconds; max_flow people per minute
 lets one person in every 60 / max_flow seconds.
 """
 
+import copy
 import time
 from types import SimpleNamespace as N
 
@@ -17,7 +18,8 @@ from starlette.websockets import WebSocketDisconnect
 from app.auth import _password_hash
 from app.db_session import get_db
 from app.main import app
-from app.models import AuditLog, User, UserRole
+from app.models import AuditLog, SimulationRun, User, UserRole
+from app.services.hazards import hazard_context
 from app.services.simulation import ModelSettings, Simulation
 
 API = "/api/v1"
@@ -213,6 +215,26 @@ def test_simulation_is_deterministic():
     first = simulate(nodes, edges, people, [hazard(ids["C2"], start_s=3, spread=1)])
     second = simulate(nodes, edges, people, [hazard(ids["C2"], start_s=3, spread=1)])
     assert first.agent_rows() == second.agent_rows() and first.summary() == second.summary()
+
+
+def test_frames_show_where_hazards_are_for_drawing():
+    nodes, edges, ids = spec_graph()
+    sim = Simulation(nodes, edges, [person("a", ids["ICU"])],
+                     [hazard(ids["C2"], spread=1.0), hazard(ids["S1"], kind="smoke", spread=0, hazard_id=2)],
+                     "dijkstra", settings())
+    rows = {row["node_id"]: row for row in sim.step()["hazards"]}
+    assert rows[ids["C2"]] == {"node_id": ids["C2"], "types": ["fire"], "reached": True, "risk": 1.0}
+    assert rows[ids["S1"]]["types"] == ["smoke"] and rows[ids["S1"]]["reached"] is True
+    # WardA is 12 m from C2: the fire gets there in 12 minutes, outside the 5-minute horizon.
+    assert ids["WardA"] not in rows
+    # S2 is 10 m away (10 minutes): after 6 minutes it is coming (risk 0.2) but not there yet.
+    later = hazard_context(nodes, edges, [hazard(ids["C2"], spread=1.0)], 6.0, horizon_minutes=5.0,
+                           risk_cost_metres=50.0, smoke_blocking_severity=4)
+    assert later.nodes[ids["S2"]].reached_types == () and later.nodes[ids["S2"]].risk == pytest.approx(0.2)
+    assert later.nodes[ids["C2"]].reached_types == ("fire",)
+    # The saved timeline stays small: no positions and no hazard rows.
+    fresh = Simulation(nodes, edges, [person("b", ids["ICU"])], [hazard(ids["C2"])], "dijkstra", settings())
+    assert all("hazards" not in f and "positions" not in f for f in fresh.run_to_end(5))
 
 
 def test_frames_follow_the_contract():
@@ -575,6 +597,31 @@ def test_expired_stream_tokens_are_refused(client, db_session, monkeypatch):
     assert closed.value.code == 4401
 
 
+def test_the_run_map_has_sizes_and_older_runs_get_todays_size_if_unmoved(client, db_session):
+    site = Site(client, db_session, "Size Map Org", walkers=1)
+    client.patch(f"{API}/nodes/{site.ids['ICU']}", headers=site.headers, json={"width_m": 12, "length_m": 10})
+    run_id = site.post("/simulate", {"scenario_id": site.scenario("Fire C1", [("C1", {})]),
+                                     "algorithm": "astar"})["run_id"]
+    drawn = {n["name"]: n for n in client.get(f"{API}/simulation_runs/{run_id}", headers=site.headers)
+             .json()["map"]["nodes"]}
+    assert (drawn["ICU"]["width_m"], drawn["ICU"]["length_m"]) == (12, 10)
+    assert drawn["C1"]["width_m"] is None
+
+    # A run saved before sizes existed: its snapshot has no width_m / length_m.
+    run = db_session.get(SimulationRun, run_id)
+    snapshot = copy.deepcopy(run.params["snapshot"])
+    for item in snapshot["nodes"]:
+        item.pop("width_m"), item.pop("length_m")
+    run.params = {**run.params, "snapshot": snapshot}
+    db_session.flush()
+    client.patch(f"{API}/nodes/{site.ids['WardA']}", headers=site.headers,
+                 json={"width_m": 20, "length_m": 12, "x": 500.0})            # sized, but moved since
+    drawn = {n["name"]: n for n in client.get(f"{API}/simulation_runs/{run_id}", headers=site.headers)
+             .json()["map"]["nodes"]}
+    assert (drawn["ICU"]["width_m"], drawn["ICU"]["length_m"]) == (12, 10)    # same place: today's size
+    assert drawn["WardA"]["width_m"] is None and drawn["WardA"]["x"] == 1.0   # moved: no size, old position
+
+
 def test_run_detail_includes_the_building_map_without_people(client, db_session):
     site = Site(client, db_session, "Map Org", walkers=2)
     run_id = site.post("/simulate", {"scenario_id": site.scenario("Fire C1", [("C1", {})]),
@@ -586,7 +633,9 @@ def test_run_detail_includes_the_building_map_without_people(client, db_session)
     drawn = run["map"]
     assert drawn["building_id"] == site.building["id"]
     assert {n["name"] for n in drawn["nodes"]} == {name for name, _ in SPEC_NODES}
-    assert all(set(n) == {"id", "name", "type", "x", "y", "floor_id", "is_blocked"} for n in drawn["nodes"])
-    assert all(set(e) == {"id", "from_node_id", "to_node_id", "is_blocked"} for e in drawn["edges"])
+    assert all(set(n) == {"id", "name", "type", "x", "y", "floor_id", "is_blocked", "is_evacuation_lift",
+                          "width_m", "length_m"} for n in drawn["nodes"])
+    assert all(set(e) == {"id", "from_node_id", "to_node_id", "is_blocked", "distance", "width"}
+               for e in drawn["edges"])
     assert len(drawn["edges"]) == len(SPEC_EDGES)
     assert "Nurse" not in str(drawn) and "agents" not in drawn

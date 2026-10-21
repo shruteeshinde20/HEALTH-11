@@ -186,3 +186,47 @@
     margin: 4px 0 0;
   }
 }
+
+/* Floor-plan drawing (components/floor-plan.tsx): people glide between
+   frames; fire flickers, smoke drifts, a coming hazard pulses. All of it
+   stops for people who ask their system for reduced motion. */
+@layer components {
+  .plan-person {
+    transition-property: transform;
+    transition-timing-function: linear;
+  }
+  .plan-fire {
+    animation: plan-flicker 1.4s ease-in-out infinite;
+  }
+  .plan-smoke {
+    animation: plan-drift 3.2s ease-in-out infinite;
+  }
+  .plan-coming {
+    animation: plan-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes plan-flicker {
+  0%, 100% { opacity: 0.85; }
+  35% { opacity: 0.6; }
+  70% { opacity: 0.95; }
+}
+
+@keyframes plan-drift {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes plan-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.75; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-person {
+    transition: none !important;
+  }
+  .plan-fire, .plan-smoke, .plan-coming {
+    animation: none;
+  }
+}

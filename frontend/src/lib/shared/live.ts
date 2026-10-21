@@ -9,6 +9,9 @@ export type PersonStatus = "active" | "evacuated" | "needs_assistance" | "reache
 
 export type Position = { id: string; x: number; y: number; floor_id: number; mobility: string; status: string };
 
+/** A place a hazard has reached (types) or is about to reach (risk above 0). */
+export type HazardSpot = { node_id: number; types: string[]; reached: boolean; risk: number };
+
 export type LiveFrame = {
   t: number;
   total: number;
@@ -21,10 +24,17 @@ export type LiveFrame = {
   exit_load: Record<string, number>;
   done: boolean;
   positions: Position[];
+  hazards: HazardSpot[];
 };
 
-export type MapNode = { id: number; name: string; type: string; x: number; y: number; floor_id: number; is_blocked: boolean };
-export type MapEdge = { id: number; from_node_id: number; to_node_id: number; is_blocked: boolean };
+export type MapNode = {
+  id: number; name: string; type: string; x: number; y: number; floor_id: number; is_blocked: boolean;
+  is_evacuation_lift?: boolean; width_m?: number | null; length_m?: number | null;
+};
+export type MapEdge = {
+  id: number; from_node_id: number; to_node_id: number; is_blocked: boolean;
+  distance?: number | null; width?: number | null;
+};
 export type RunMap = { building_id: number | null; nodes: MapNode[]; edges: MapEdge[] };
 
 export type StreamMessage =
@@ -62,6 +72,15 @@ export function parseStreamMessage(raw: string): StreamMessage {
         }).map((p) => ({ ...p, id: String(p.id) }))
       : [];
     const numbers = (value: unknown) => (Array.isArray(value) ? value.filter(isNumber) : []);
+    const hazards: HazardSpot[] = Array.isArray(body.hazards)
+      ? (body.hazards as unknown[]).flatMap((h) => {
+          if (typeof h !== "object" || h === null) return [];
+          const q = h as Record<string, unknown>;
+          if (!isNumber(q.node_id) || !isNumber(q.risk)) return [];
+          const types = Array.isArray(q.types) ? q.types.filter((t): t is string => typeof t === "string") : [];
+          return [{ node_id: q.node_id, types, reached: q.reached === true, risk: Math.min(Math.max(q.risk, 0), 1) }];
+        })
+      : [];
     const load: Record<string, number> = {};
     if (typeof body.exit_load === "object" && body.exit_load !== null) {
       for (const [key, value] of Object.entries(body.exit_load as Record<string, unknown>)) {
@@ -75,7 +94,7 @@ export function parseStreamMessage(raw: string): StreamMessage {
         active: body.active as number, needs_assistance: body.needs_assistance as number,
         reached_by_hazard: body.reached_by_hazard as number, done: body.done,
         blocked_nodes: numbers(body.blocked_nodes), congested_edges: numbers(body.congested_edges),
-        exit_load: load, positions,
+        exit_load: load, positions, hazards,
       },
     };
   }
@@ -94,34 +113,6 @@ export function closeReason(code: number, finished: boolean): string | null {
 export function mapFloors(map: RunMap): number[] {
   return [...new Set(map.nodes.map((n) => n.floor_id))].sort((a, b) => a - b);
 }
-
-/** SVG viewBox around a floor's places, with a margin; units are the floor plan's own. */
-export function floorView(nodes: { x: number; y: number }[]): { x: number; y: number; width: number; height: number; unit: number } {
-  if (nodes.length === 0) return { x: -50, y: -50, width: 100, height: 100, unit: 2 };
-  const xs = nodes.map((n) => n.x);
-  const ys = nodes.map((n) => n.y);
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-  const extent = Math.max(maxX - minX, maxY - minY, 1);
-  const unit = extent / 50;                // base size for circles, lines and text
-  const margin = unit * 4;
-  return { x: minX - margin, y: minY - margin, width: maxX - minX + 2 * margin, height: maxY - minY + 2 * margin, unit };
-}
-
-/** A small fixed offset per person, so people waiting at the same place stay visible. */
-export function spread(id: string, unit: number): { dx: number; dy: number } {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  const angle = ((hash >>> 0) % 360) * (Math.PI / 180);
-  const radius = unit * (0.6 + (((hash >>> 9) % 100) / 100) * 0.9);
-  return { dx: Math.cos(angle) * radius, dy: Math.sin(angle) * radius };
-}
-
-export const MOBILITY_COLOURS: Record<string, string> = {
-  ambulatory: "#2563EB",   // blue
-  wheelchair: "#7C3AED",   // purple
-  stretcher: "#C2410C",    // orange
-  ventilator: "#BE185D",   // pink
-};
 
 export const MOBILITY_LABELS: Record<string, string> = {
   ambulatory: "Walking", wheelchair: "Wheelchair", stretcher: "Stretcher", ventilator: "Ventilator",

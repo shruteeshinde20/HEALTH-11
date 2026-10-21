@@ -216,9 +216,16 @@ test("Run and watch: the run plays live to the end", async () => {
   const astar = page.getByRole("row").filter({ has: page.getByText("A*", { exact: true }) });
   await astar.getByRole("button", { name: "Run and watch" }).click();
   await expect(page).toHaveURL(/\/live\?run=\d+/);
+  // The floor plan: rooms by name, an exit sign, and a scale bar from the paths' distances.
+  const plan = page.getByRole("img", { name: /^Floor plan of Ground/ });
+  await expect(plan.getByText("ICU", { exact: true })).toBeVisible();
+  await expect(plan.getByText("E1", { exact: true })).toBeVisible();
+  await expect(plan.getByText(/^\d+ m$/)).toBeVisible();
   await page.getByLabel("Speed").selectOption("60");
   await page.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("status").filter({ hasText: /^Finished at/ })).toBeVisible({ timeout: 60_000 });
+  // The fire at C1 is drawn where it is, from the live frames.
+  await expect(plan.locator("title").filter({ hasText: /^C1: fire$/ })).toHaveCount(1);
 });
 
 test("Reports & History: details with the timeline chart, and a real PDF", async () => {

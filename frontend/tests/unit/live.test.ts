@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  clock, closeReason, exitLoadRows, floorView, mapFloors, parseStreamMessage, spread,
+  clock, closeReason, exitLoadRows, mapFloors, parseStreamMessage,
 } from "../../src/lib/shared/live.ts";
 
 const frame = {
@@ -42,6 +42,30 @@ test("unexpected stream data is ignored, never trusted", () => {
   }
 });
 
+test("hazard spots are read, checked and kept within 0 to 1", () => {
+  const withHazards = {
+    ...frame,
+    hazards: [
+      { node_id: 4, types: ["fire", 7], reached: true, risk: 1 },
+      { node_id: 5, types: [], reached: false, risk: 0.25 },
+      { node_id: "6", types: ["smoke"], reached: true, risk: 1 },     // not a number: dropped
+      { node_id: 8, types: "fire", reached: "yes", risk: 3 },         // odd values made safe
+    ],
+  };
+  const parsed = parseStreamMessage(JSON.stringify(withHazards));
+  assert.equal(parsed.kind, "frame");
+  if (parsed.kind === "frame") {
+    assert.deepEqual(parsed.frame.hazards, [
+      { node_id: 4, types: ["fire"], reached: true, risk: 1 },
+      { node_id: 5, types: [], reached: false, risk: 0.25 },
+      { node_id: 8, types: [], reached: false, risk: 1 },
+    ]);
+  }
+  // Older servers send no hazard rows: an empty list.
+  const plain = parseStreamMessage(JSON.stringify(frame));
+  assert.ok(plain.kind === "frame" && plain.frame.hazards.length === 0);
+});
+
 test("closing the stream is explained in words", () => {
   assert.equal(closeReason(1000, true), null);
   assert.equal(closeReason(1006, true), null);             // finished before the close
@@ -50,26 +74,13 @@ test("closing the stream is explained in words", () => {
   assert.match(closeReason(1006, false) ?? "", /lost/);
 });
 
-test("floors and the drawing area come from the run's own map", () => {
+test("floors come from the run's own map", () => {
   const map = { building_id: 1, edges: [], nodes: [
     { id: 1, name: "A", type: "ward", x: 0, y: 0, floor_id: 5, is_blocked: false },
     { id: 2, name: "B", type: "exit", x: 100, y: 50, floor_id: 3, is_blocked: false },
     { id: 3, name: "C", type: "stair", x: 10, y: 10, floor_id: 5, is_blocked: false },
   ] };
   assert.deepEqual(mapFloors(map), [3, 5]);
-  const view = floorView([{ x: 0, y: 0 }, { x: 100, y: 50 }]);
-  assert.equal(view.unit, 2);
-  assert.deepEqual([view.x, view.y, view.width, view.height], [-8, -8, 116, 66]);
-  assert.equal(floorView([{ x: 5, y: 5 }]).width > 0, true);   // one place still gets an area
-  assert.equal(floorView([]).width, 100);
-});
-
-test("people at the same place are spread out, the same way every frame", () => {
-  const a = spread("staff-1", 2);
-  assert.deepEqual(spread("staff-1", 2), a);
-  assert.notDeepEqual(spread("staff-2", 2), a);
-  const distance = Math.hypot(a.dx, a.dy);
-  assert.ok(distance >= 1.2 - 1e-9 && distance <= 3.0 + 1e-9);
 });
 
 test("clock and exit loads", () => {

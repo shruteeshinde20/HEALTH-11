@@ -7,9 +7,10 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useMemo, useState, type FormEvent, type ReactNode } from "react";
 
 import { Field, FormError } from "@/components/facility-forms.tsx";
+import { FloorPlan, PERSON_COLOURS } from "@/components/floor-plan.tsx";
 import { RunResult } from "@/components/run-result.tsx";
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader, Tag } from "@/components/ui.tsx";
 import { apiRequest } from "@/lib/client/api.ts";
@@ -20,9 +21,9 @@ import { useAll, useApi } from "@/lib/client/use-api.ts";
 import { useRunStream, type StreamPhase } from "@/lib/client/use-run-stream.ts";
 import type { Floor, HazardType, Page, RunDetail, RunSummary, Scenario } from "@/lib/shared/api-types.ts";
 import { algorithmLabel, formatDateTime } from "@/lib/shared/format.ts";
-import { hazardName, parseNumber, placeColour } from "@/lib/shared/graph.ts";
+import { hazardName, parseNumber } from "@/lib/shared/graph.ts";
 import {
-  MOBILITY_COLOURS, MOBILITY_LABELS, STREAM_SPEEDS, clock, exitLoadRows, floorView, mapFloors, spread,
+  STREAM_SPEEDS, clock, exitLoadRows, mapFloors,
   type LiveFrame, type RunMap,
 } from "@/lib/shared/live.ts";
 import { SAFETY_NOTICE, pageFor } from "@/lib/shared/pages.ts";
@@ -105,6 +106,8 @@ function LiveView({ run, floors, scenarioName, onRunChanged }: {
   const floorName = (id: number) => floors.find((f) => f.id === id)?.name ?? `Floor ${id}`;
   const nodeNames = useMemo(() => new Map(run.map.nodes.map((n) => [n.id, n.name])), [run.map]);
   const frame = stream.frame;
+  // One simulation step every tick; at speed N a step takes tick / N real seconds.
+  const tickMs = 1000 * (run.parameters_used.find((p) => p.name === "simulation_tick_seconds")?.value ?? 1);
 
   if (run.map.nodes.length === 0) {
     return <Card><EmptyState>This run has no floor plan to show (its building had no places).</EmptyState></Card>;
@@ -158,7 +161,7 @@ function LiveView({ run, floors, scenarioName, onRunChanged }: {
             })}
           </div>
         )}
-        <FloorMap map={run.map} floorId={shownFloor} frame={frame}
+        <FloorMap map={run.map} floorId={shownFloor} frame={frame} stepMs={tickMs / speed}
                   label={`Floor plan of ${floorName(shownFloor)}${frame ? `, ${onFloor} people on this floor` : ""}`} />
         <Legend />
         <p className="note mb-0">{SAFETY_NOTICE}</p>
@@ -196,78 +199,57 @@ function StreamStatus({ phase, frame, error }: { phase: StreamPhase; frame: Live
 
 // --- Map ----------------------------------------------------------------------------------
 
-function FloorMap({ map, floorId, frame, label }: { map: RunMap; floorId: number; frame: LiveFrame | null; label: string }) {
-  const nodes = useMemo(() => map.nodes.filter((n) => n.floor_id === floorId), [map, floorId]);
-  const byId = useMemo(() => new Map(map.nodes.map((n) => [n.id, n])), [map]);
-  const edges = useMemo(
-    () => map.edges.filter((e) => byId.get(e.from_node_id)?.floor_id === floorId && byId.get(e.to_node_id)?.floor_id === floorId),
-    [map, byId, floorId],
-  );
-  const view = useMemo(() => floorView(nodes), [nodes]);
-  const blocked = new Set(frame?.blocked_nodes ?? []);
-  const congested = new Set(frame?.congested_edges ?? []);
-  const people = (frame?.positions ?? []).filter((p) => p.floor_id === floorId);
-  const u = view.unit;
-
+function FloorMap({ map, floorId, frame, label, stepMs }: {
+  map: RunMap; floorId: number; frame: LiveFrame | null; label: string; stepMs: number;
+}) {
+  const places = useMemo(() => map.nodes.filter((n) => n.floor_id === floorId), [map, floorId]);
+  const paths = useMemo(() => {
+    const here = new Set(places.map((p) => p.id));
+    return map.edges.filter((e) => here.has(e.from_node_id) && here.has(e.to_node_id));
+  }, [map, places]);
+  const blocked = useMemo(() => new Set(frame?.blocked_nodes ?? []), [frame]);
+  const congested = useMemo(() => new Set(frame?.congested_edges ?? []), [frame]);
+  const people = useMemo(() => (frame?.positions ?? []).filter((p) => p.floor_id === floorId), [frame, floorId]);
   return (
-    <svg role="img" aria-label={label} viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
-         className="h-[460px] w-full rounded-lg border border-line bg-white">
-      {edges.map((edge) => {
-        const a = byId.get(edge.from_node_id)!;
-        const b = byId.get(edge.to_node_id)!;
-        const busy = congested.has(edge.id);
-        return (
-          <line key={edge.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={edge.is_blocked ? "#DC2626" : busy ? "#EA580C" : "#CBD5E1"}
-                strokeWidth={busy ? u * 0.9 : u * 0.45} strokeDasharray={edge.is_blocked ? `${u} ${u * 0.7}` : undefined}
-                strokeLinecap="round" />
-        );
-      })}
-      {nodes.map((node) => {
-        const isBlocked = node.is_blocked || blocked.has(node.id);
-        return (
-          <g key={node.id}>
-            <circle cx={node.x} cy={node.y} r={u * 1.6} fill={placeColour(node.type, isBlocked)}
-                    stroke={isBlocked ? "#DC2626" : "#94A3B8"} strokeWidth={u * 0.25} />
-            <text x={node.x} y={node.y - u * 2.3} textAnchor="middle" fontSize={u * 1.5} fill="#334155">{node.name}</text>
-          </g>
-        );
-      })}
-      {people.map((person) => {
-        const { dx, dy } = spread(person.id, u);
-        const moving = person.status === "active";
-        return (
-          <circle key={person.id} cx={person.x + dx} cy={person.y + dy} r={u * 0.6}
-                  fill={moving ? MOBILITY_COLOURS[person.mobility] ?? "#334155" : "#FFFFFF"}
-                  stroke={moving ? "#FFFFFF" : "#1E3A5F"} strokeWidth={u * 0.18} />
-        );
-      })}
-    </svg>
+    <FloorPlan places={places} paths={paths} label={label} people={people} hazards={frame?.hazards ?? []}
+               blocked={blocked} congested={congested} stepMs={stepMs} />
   );
 }
 
 function Legend() {
-  return (
-    <ul className="sm my-2 flex list-none flex-wrap gap-x-4 gap-y-1 p-0">
-      {Object.entries(MOBILITY_LABELS).map(([key, label]) => (
-        <li key={key} className="flex items-center gap-1">
-          <svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill={MOBILITY_COLOURS[key]} /></svg>{label}
+  const people: [string, ReactNode][] = [
+    ["Walking patient", <circle key="i" cx="8" cy="8" r="5.5" fill={PERSON_COLOURS.ambulatory} stroke="#fff" strokeWidth="1.4" />],
+    ["Wheelchair", <g key="i"><circle cx="8" cy="8" r="5.5" fill={PERSON_COLOURS.wheelchair} stroke="#fff" strokeWidth="1.4" />
+      <circle cx="8" cy="8" r="2.7" fill="none" stroke="#fff" strokeWidth="1.1" /></g>],
+    ["Stretcher", <rect key="i" x="1.5" y="4.5" width="13" height="7" rx="2" fill={PERSON_COLOURS.stretcher} stroke="#fff" strokeWidth="1.2" />],
+    ["Ventilator", <g key="i"><rect x="1.5" y="4.5" width="13" height="7" rx="2" fill={PERSON_COLOURS.ventilator} stroke="#fff" strokeWidth="1.2" />
+      <path d="M 5.5 8 L 10.5 8 M 8 5.8 L 8 10.2" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" /></g>],
+    ["Staff", <g key="i"><circle cx="8" cy="8" r="5.5" fill={PERSON_COLOURS.staff} stroke="#fff" strokeWidth="1.4" />
+      <circle cx="8" cy="8" r="1.8" fill="#fff" /></g>],
+    ["Needs help or reached by the hazard", <circle key="i" cx="8" cy="8" r="5" fill="#fff" stroke="#1E3A5F" strokeWidth="1.5" />],
+  ];
+  const map: [string, ReactNode][] = [
+    ["Fire", <rect key="i" x="1" y="3" width="14" height="10" rx="3" fill="#F97316" />],
+    ["Smoke", <rect key="i" x="1" y="3" width="14" height="10" rx="3" fill="#64748B" opacity="0.7" />],
+    ["Chemical spill", <rect key="i" x="1" y="3" width="14" height="10" rx="3" fill="#84CC16" />],
+    ["Hazard coming", <rect key="i" x="1.5" y="3.5" width="13" height="9" rx="3" fill="#FDBA74" fillOpacity="0.5" stroke="#EA580C" strokeDasharray="2.5 1.5" />],
+    ["Blocked", <g key="i"><rect x="1" y="3" width="14" height="10" fill="#FEE2E2" stroke="#DC2626" />
+      <path d="M 3 13 L 13 3 M -1 9 L 5 3 M 9 13 L 15 7" stroke="#DC2626" strokeOpacity="0.6" strokeWidth="1.5" /></g>],
+    ["Queue", <line key="i" x1="1" y1="8" x2="15" y2="8" stroke="#F97316" strokeWidth="4" strokeLinecap="round" />],
+    ["Exit", <rect key="i" x="3" y="3" width="10" height="10" rx="1" fill="#16A34A" />],
+    ["Evacuation lift", <g key="i"><rect x="3" y="3" width="10" height="10" fill="#E7ECF3" stroke="#16A34A" strokeWidth="1.5" />
+      <path d="M 4.5 4.5 L 11.5 11.5 M 11.5 4.5 L 4.5 11.5" stroke="#16A34A" strokeWidth="1.2" /></g>],
+  ];
+  const row = (items: [string, ReactNode][], label: string) => (
+    <ul className="sm my-1 flex list-none flex-wrap gap-x-4 gap-y-1 p-0" aria-label={label}>
+      {items.map(([text, icon]) => (
+        <li key={text} className="flex items-center gap-1">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">{icon}</svg>{text}
         </li>
       ))}
-      <li className="flex items-center gap-1">
-        <svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="#FFFFFF" stroke="#1E3A5F" strokeWidth="1.5" /></svg>
-        Waiting for help or reached by the hazard
-      </li>
-      <li className="flex items-center gap-1">
-        <svg width="16" height="12" aria-hidden="true"><line x1="1" y1="6" x2="15" y2="6" stroke="#EA580C" strokeWidth="4" /></svg>
-        Queue at this path
-      </li>
-      <li className="flex items-center gap-1">
-        <svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="#F9C5C5" stroke="#DC2626" /></svg>
-        Blocked by a hazard
-      </li>
     </ul>
   );
+  return <div className="my-2">{row(people, "People")}{row(map, "Map")}</div>;
 }
 
 // --- Results ------------------------------------------------------------------------------

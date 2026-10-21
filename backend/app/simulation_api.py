@@ -35,6 +35,7 @@ from app.audit import record_audit
 from app.auth import issue_stream_token
 from app.db_session import get_db
 from app.models.facility import Building, Hospital
+from app.models.graph import Node
 from app.models.operations import HazardType, Scenario
 from app.models.simulation import SimulationRun
 from app.permissions import Editor, Reader
@@ -155,6 +156,7 @@ def list_runs(
 def get_run(run_id: int, db: Db, user: Reader):
     run = get_active(db, SimulationRun, run_id, user.organization_id, "Simulation run")
     results = run.results or {}
+    snapshot = run.params.get("snapshot") or {}
     return {
         **_run_summary(run).model_dump(),
         "parameters_used": run.params.get("parameters_used", []),
@@ -168,22 +170,46 @@ def get_run(run_id: int, db: Db, user: Reader):
         "bottlenecks": results.get("bottlenecks", []),
         "static_analysis": results.get("static_analysis", {}),
         "recommendations": results.get("recommendations", []),
-        "map": run_map(run.params.get("snapshot") or {}),
+        "map": run_map(snapshot, _current_sizes(db, user.organization_id, snapshot)),
     }
 
 
-def run_map(snapshot: dict) -> dict:
+MAP_NODE_KEYS = ("id", "name", "type", "x", "y", "floor_id", "is_blocked", "is_evacuation_lift",
+                 "width_m", "length_m")
+MAP_EDGE_KEYS = ("id", "from_node_id", "to_node_id", "is_blocked", "distance", "width")
+
+
+def run_map(snapshot: dict, current_sizes: dict[int, tuple] | None = None) -> dict:
     """The building as it was when the run started, for drawing the live view.
 
     Places and paths only; no people (their positions come from the stream).
+    Runs saved before places had sizes take today's size of a place, but only
+    if the place is still drawn where it was (same x, y), so the drawing fits.
+    `current_sizes` maps node id -> (x, y, width_m, length_m) as stored now.
     """
+    nodes = []
+    for node in snapshot.get("nodes", []):
+        drawn = {key: node.get(key) for key in MAP_NODE_KEYS}
+        drawn["is_evacuation_lift"] = bool(drawn["is_evacuation_lift"])
+        now = (current_sizes or {}).get(node.get("id"))
+        if "width_m" not in node and now is not None and (now[0], now[1]) == (node.get("x"), node.get("y")):
+            drawn["width_m"], drawn["length_m"] = now[2], now[3]
+        nodes.append(drawn)
     return {
         "building_id": snapshot.get("building_id"),
-        "nodes": [{key: node.get(key) for key in ("id", "name", "type", "x", "y", "floor_id", "is_blocked")}
-                  for node in snapshot.get("nodes", [])],
-        "edges": [{key: edge.get(key) for key in ("id", "from_node_id", "to_node_id", "is_blocked")}
-                  for edge in snapshot.get("edges", [])],
+        "nodes": nodes,
+        "edges": [{key: edge.get(key) for key in MAP_EDGE_KEYS} for edge in snapshot.get("edges", [])],
     }
+
+
+def _current_sizes(db: Session, organization_id: int, snapshot: dict) -> dict[int, tuple]:
+    """Today's position and size of the places in an older snapshot without sizes."""
+    ids = [n["id"] for n in snapshot.get("nodes", []) if "width_m" not in n and isinstance(n.get("id"), int)]
+    if not ids:
+        return {}
+    rows = db.execute(select(Node.id, Node.x, Node.y, Node.width_m, Node.length_m).where(
+        Node.organization_id == organization_id, Node.id.in_(ids), Node.deleted_at.is_(None)))
+    return {row.id: (row.x, row.y, row.width_m, row.length_m) for row in rows}
 
 
 @router.post("/simulations/{run_id}/stream-token")

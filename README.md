@@ -549,6 +549,15 @@ route becomes unsafe. Outcomes are `evacuated`, `needs_assistance` or
 dashboard shows an evacuation time only when everyone got out. The same inputs
 always give the same result; each run keeps a snapshot so it can be replayed.
 
+Each streamed frame has the people still inside (`positions`), the places
+that cannot be used (`blocked_nodes`), queues (`congested_edges`) and
+`hazards`: one row per place a hazard has reached (`types`, e.g. `["fire"]`)
+or is about to reach (`risk` above 0, `reached: false`). Live Simulation draws
+this on the floor plan: rooms at their size in metres, doors, stairs, lifts and
+exit signs, an icon per person by mobility type, fire, smoke, chemicals and
+structural damage where they are. A run saved before places had sizes shows
+today's sizes of the places that have not moved since.
+
 | Parameter | Default (assumed, to be validated) |
 |---|---|
 | `speed_ambulatory_m_per_s` | 1.2 |

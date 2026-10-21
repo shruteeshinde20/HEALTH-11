@@ -50,7 +50,8 @@ METHOD = [
 def _node_dict(node):
     return {"id": node.id, "name": node.name, "type": node.type.value, "x": node.x,
             "y": node.y, "floor_id": node.floor_id, "is_blocked": node.is_blocked,
-            "is_evacuation_lift": node.is_evacuation_lift}
+            "is_evacuation_lift": node.is_evacuation_lift,
+            "width_m": node.width_m, "length_m": node.length_m}
 
 
 def _edge_dict(edge):

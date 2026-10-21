@@ -42,6 +42,7 @@ class NodeHazard:
     risk: float
     blocked: bool
     arrival_minutes: float | None  # earliest arrival of any hazard; None = never
+    reached_types: tuple[str, ...] = ()  # hazard types already here (for drawing)
 
 
 @dataclass
@@ -83,6 +84,7 @@ def hazard_context(
     risk: dict[int, float] = {}
     blocked: set[int] = set()
     arrival: dict[int, float] = {}
+    reached: dict[int, set[str]] = {}
 
     for hazard in hazards:
         if not getattr(hazard, "is_active", True):
@@ -111,6 +113,7 @@ def hazard_context(
             arrival[node_id] = min(arrival.get(node_id, math.inf), reached_at)
             if reached_at <= minutes_elapsed:
                 node_risk = intensity
+                reached.setdefault(node_id, set()).add(kind)
                 if blocks:
                     blocked.add(node_id)
             elif reached_at - minutes_elapsed <= horizon_minutes:
@@ -124,5 +127,6 @@ def hazard_context(
             risk=round(risk.get(node_id, 0.0), 6),
             blocked=node_id in blocked,
             arrival_minutes=arrival.get(node_id),
+            reached_types=tuple(sorted(reached.get(node_id, ()))),
         )
     return context

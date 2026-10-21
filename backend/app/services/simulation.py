@@ -363,7 +363,7 @@ class Simulation:
         while not self.done:
             frame = self.step()
             if self.t + 1e-9 >= next_sample or self.done:
-                timeline.append({k: v for k, v in frame.items() if k != "positions"})
+                timeline.append({k: v for k, v in frame.items() if k not in ("positions", "hazards")})
                 while next_sample <= self.t + 1e-9:
                     next_sample += frame_seconds or math.inf
         return timeline
@@ -416,7 +416,20 @@ class Simulation:
         if positions:
             frame["positions"] = [self._position(a) for a in self.agents
                                   if a.status != EVACUATED]
+            frame["hazards"] = self.hazard_rows()
         return frame
+
+    def hazard_rows(self) -> list[dict]:
+        """Where hazards are now, for drawing: places a hazard has reached
+        (with its types) and places it is about to reach (risk above 0)."""
+        if self.hazard is None:
+            return []
+        return [
+            {"node_id": node_id, "types": list(state.reached_types),
+             "reached": bool(state.reached_types), "risk": round(state.risk, 3)}
+            for node_id, state in sorted(self.hazard.nodes.items())
+            if state.reached_types or state.risk > 0
+        ]
 
     def summary(self) -> dict:
         tally = self.counts()
