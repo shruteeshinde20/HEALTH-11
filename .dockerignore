@@ -9,6 +9,8 @@
 !tests/
 # Scripts tested in the test image only (never in the production image).
 !scripts/
+# The made-up example CSV files, also tested in the test image only.
+!docs/examples/
 
 # Never in an image, even inside the folders above
 **/__pycache__/

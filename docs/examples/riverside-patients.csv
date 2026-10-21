@@ -1,0 +1,21 @@
+patient_code,mobility,criticality,test_data,hospital,building,floor_number,place
+RV-P001,ambulatory,2,true,Riverside Hospital (made-up),Main Building,0,Ward A
+RV-P002,ambulatory,1,true,Riverside Hospital (made-up),Main Building,0,Ward A
+RV-P003,wheelchair,3,true,Riverside Hospital (made-up),Main Building,0,Ward A
+RV-P004,stretcher,4,true,Riverside Hospital (made-up),Main Building,0,Ward A
+RV-P005,ambulatory,2,true,Riverside Hospital (made-up),Main Building,0,Ward A
+RV-P006,ventilator,5,true,Riverside Hospital (made-up),Main Building,0,ICU
+RV-P007,stretcher,5,true,Riverside Hospital (made-up),Main Building,0,ICU
+RV-P008,ventilator,5,true,Riverside Hospital (made-up),Main Building,0,ICU
+RV-P009,ambulatory,1,true,Riverside Hospital (made-up),Main Building,0,Ward B
+RV-P010,wheelchair,2,true,Riverside Hospital (made-up),Main Building,0,Ward B
+RV-P011,ambulatory,2,true,Riverside Hospital (made-up),Main Building,0,Ward B
+RV-P012,stretcher,3,true,Riverside Hospital (made-up),Main Building,0,Ward B
+RV-P013,wheelchair,3,true,Riverside Hospital (made-up),Main Building,0,Ward B
+RV-P014,stretcher,4,true,Riverside Hospital (made-up),Main Building,0,Emergency
+RV-P015,ambulatory,3,true,Riverside Hospital (made-up),Main Building,0,Emergency
+RV-P016,wheelchair,3,true,Riverside Hospital (made-up),Main Building,0,Emergency
+RV-P017,ventilator,5,true,Riverside Hospital (made-up),Main Building,0,Operating Theatre
+RV-P018,ambulatory,1,true,Riverside Hospital (made-up),Main Building,0,Reception
+RV-P019,ambulatory,1,true,Riverside Hospital (made-up),Main Building,0,Reception
+RV-P020,wheelchair,2,true,Riverside Hospital (made-up),Main Building,0,Reception

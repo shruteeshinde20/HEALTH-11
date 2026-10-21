@@ -369,6 +369,25 @@ shown. Then it prints the **Organization ID** and email to log in with. The
 [user guide](docs/user-guide.md#a-10-minute-demo-with-the-demo-data) has a
 walkthrough.
 
+**Example files (made-up), to show importing.** `docs/examples/` has a
+one-floor plan (`riverside-ground-floor.csv`: 15 places with sizes in metres,
+14 paths), 20 patients (`riverside-patients.csv`) and 8 staff
+(`riverside-staff.csv`), all marked as test data. Import them into a separate
+organization: a people file is the whole list, so importing it into the demo
+organization would remove the demo's patients (the check step shows this
+before anything is saved).
+
+1. Log out, choose **Create an account** and register a new organization.
+2. **Facility Manager**: add the hospital `Riverside Hospital (made-up)`, its
+   building `Main Building` and a floor with number `0`; then **Import** on that
+   floor and choose `riverside-ground-floor.csv`.
+3. **Patients & Staff**: **Import CSV**, choose `riverside-patients.csv`,
+   **Check file**, then **Apply changes**. Then **Staff**, the same with
+   `riverside-staff.csv`.
+
+`tests/test_example_files.py` imports these files the same way and checks that
+a fire in the Pharmacy gets all 28 people out.
+
 ## 12. Forgotten password
 
 The website has no "forgot password" e-mail. An Administrator can set a new

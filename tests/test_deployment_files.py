@@ -102,7 +102,7 @@ def test_backend_image_installs_only_the_locked_packages_and_runs_as_a_user():
     test_stage = " ".join(next(s for s in stages if s[0].endswith("AS test")))
     assert "requirements-test.lock.txt" in test_stage and "pip check" in test_stage
     # The development-only demo seed is tested, but never shipped in production.
-    assert all(name in test_stage for name in ("seed_demo.py", "seed_full_demo.py", "reset_password.py"))
+    assert all(name in test_stage for name in ("seed_demo.py", "seed_full_demo.py", "reset_password.py", "docs/examples"))
     assert "scripts" not in " ".join(stages[0]) + " ".join(final)
 
 
