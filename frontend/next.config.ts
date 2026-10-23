@@ -16,6 +16,11 @@ const apiHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   output: "standalone",
+  experimental: {
+    // Upgrade reminders in `next dev` and `next build` only for security
+    // releases (https://nextjs.org/docs/app/guides/upgrading/agent-upgrade).
+    agentUpgrade: "security",
+  },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
