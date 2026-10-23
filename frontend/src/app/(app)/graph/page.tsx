@@ -14,7 +14,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useMemo, useState } from "react";
 
 import { Dialog } from "@/components/dialog.tsx";
-import { DeleteConfirm } from "@/components/facility-forms.tsx";
+import { DeleteConfirm, FloorExportLinks, FloorImport } from "@/components/facility-forms.tsx";
 import { FloorLinks, PathForm, PlaceForm } from "@/components/graph-forms.tsx";
 import {
   OUTLINE_ID, buildCanvasEdges, buildCanvasNodes, canvasScale, edgeTypes, nodeTypes, type CanvasNode,
@@ -39,6 +39,8 @@ function GraphBuilder() {
   const buildings = useAll<Building>("/buildings");
   const floors = useAll<Floor>("/floors");
   const graph = useApi<FloorGraph>(floorId ? `/floors/${floorId}/graph` : null);
+  const canEdit = useUser().role !== "Staff User";
+  const [importing, setImporting] = useState(false);
 
   const loadError = hospitals.error ?? buildings.error ?? floors.error;
   const label = (floor: Floor) => {
@@ -65,14 +67,22 @@ function GraphBuilder() {
             <option value="" disabled>Choose a floor</option>
             {options.map((f) => <option key={f.id} value={f.id}>{label(f)}</option>)}
           </select>
+          {/* Import and export of the floor plan, as in the Facility Manager (PROJECT.md:
+              graph builder with CSV, GeoJSON and JSON import and export). */}
+          {floor && canEdit && (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button type="button" className="btn l" onClick={() => setImporting(true)}>Import</button>
+              <FloorExportLinks floorId={floor.id} />
+            </div>
+          )}
         </Card>
       )}
       {floorId !== null && floors.data && !floor && (
         <Card><EmptyState>That floor was not found (it may have been deleted). Choose another floor.</EmptyState></Card>
       )}
       {floor && graph.error !== null && <ErrorState error={graph.error} onRetry={graph.reload} />}
-      {floor && graph.error === null && graph.data?.floor_id !== floor.id && <LoadingState />}
-      {floor && graph.data && graph.data.floor_id === floor.id && (
+      {floor && graph.error === null && (graph.loading || graph.data?.floor_id !== floor.id) && <LoadingState />}
+      {floor && !graph.loading && graph.data && graph.data.floor_id === floor.id && (
         <FloorEditor
           key={floor.id}
           floor={floor}
@@ -80,6 +90,9 @@ function GraphBuilder() {
           otherFloors={(floors.data ?? []).filter((f) => f.building_id === floor.building_id && f.id !== floor.id)}
         />
       )}
+      <Dialog open={importing && floor !== null} title="Import a floor file" onClose={() => setImporting(false)}>
+        {importing && floor && <FloorImport floorId={floor.id} onImported={() => graph.reload()} />}
+      </Dialog>
     </>
   );
 }
@@ -157,7 +170,7 @@ function FloorEditor({ floor, graph, otherFloors }: { floor: Floor; graph: Floor
         <Card>
           <div className="h-[460px] w-full" role="region" aria-label={`Floor plan of ${floor.name}`}>
             {nodes.length === 0
-              ? <EmptyState>This floor has no places yet. {canEdit ? "Add the first one, or import a floor file in the Facility Manager." : ""}</EmptyState>
+              ? <EmptyState>This floor has no places yet. {canEdit ? "Add the first one, or import a floor file." : ""}</EmptyState>
               : (
                 <ReactFlow
                   nodes={nodes}

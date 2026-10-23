@@ -159,6 +159,17 @@ test("Graph Builder shows the imported places", async () => {
   await expect(places.getByRole("row").filter({ has: page.getByRole("cell", { name: "ICU", exact: true }) })
     .getByRole("cell", { name: "12 × 10.5 m" })).toBeVisible();
   await expect(plan.locator('[title="ICU · icu · 12 × 10.5 m"]')).toHaveCount(1);   // the room is redrawn at its size
+
+  // Import and Export are on the Graph Builder too: an imported place is drawn straight away.
+  await expect(page.getByRole("link", { name: "CSV", exact: true })).toHaveAttribute("href", /\/floors\/\d+\/export\?format=csv$/);
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Import a floor file" });
+  const storeRoom = JSON.stringify({ nodes: [{ name: "E2E Store", type: "room", x: 500, y: 300 }], edges: [] });
+  await dialog.getByLabel("Floor file").setInputFiles({ name: "store.json", mimeType: "application/json", buffer: Buffer.from(storeRoom) });
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog.getByText("Imported 1 places and 0 paths.")).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(plan.getByText("E2E Store", { exact: true })).toBeVisible();
 });
 
 test("Patients & Staff: a CSV file is checked first, then saved; Export gives it back", async () => {
