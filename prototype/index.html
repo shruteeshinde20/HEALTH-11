@@ -132,10 +132,17 @@ main {
 .view { position: absolute; inset: 0; }
 .view canvas { display: block; }
 .clock {
-  position: absolute; left: 12px; top: 12px; background: rgba(255, 255, 255, 0.92); border: 1px solid var(--line);
+  position: absolute; left: 12px; bottom: 12px; background: rgba(255, 255, 255, 0.92); border: 1px solid var(--line);
   border-radius: 10px; padding: 6px 12px; font-variant-numeric: tabular-nums; color: var(--ink); box-shadow: var(--shadow);
 }
 .clock b { font-size: 20px; }
+.alert-bar {
+  position: absolute; left: 50%; top: 12px; transform: translateX(-50%); width: min(92%, 520px);
+  background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--orange); border-radius: 10px;
+  box-shadow: var(--shadow); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between;
+}
+.alert-bar.info { border-left-color: var(--primary); }
+.alert-bar p { font-size: 13px; color: var(--ink); min-width: 0; flex: 1 1 220px; }
 .view-note { position: absolute; right: 12px; bottom: 10px; font-size: 11px; color: var(--muted); background: rgba(255,255,255,0.85); padding: 2px 8px; border-radius: 6px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -266,7 +273,7 @@ footer.safety { font-size: 12px; color: var(--muted); border-top: 1px solid var(
             <select id="alarm"><option value="sensors">Sensors detect, commander confirms</option><option value="start">Alarm sounds at the start</option></select>
           </div>
           <div class="field"><label for="confirm">Commander decisions</label>
-            <select id="confirm"><option value="manual">I confirm each alert</option><option value="auto">Automatic after the confirmation time</option></select>
+            <select id="confirm"><option value="auto" selected>Automatic after the confirmation time</option><option value="manual">I confirm each alert (run pauses)</option></select>
           </div>
           <label class="check"><input type="checkbox" id="balance"> Balance exits (Dijkstra and A*: count people already sent to each exit)</label>
           <label class="check"><input type="checkbox" id="visitors" checked> Add visitors counted by cameras</label>
@@ -276,7 +283,7 @@ footer.safety { font-size: 12px; color: var(--muted); border-top: 1px solid var(
             <button class="btn" type="button" id="step">+10 s</button>
             <button class="btn" type="button" id="reset">Reset</button>
           </div>
-          <div class="field"><label for="speed">Speed: <span id="speed-v" class="num">20</span>&times; real time</label><input type="range" id="speed" min="1" max="120" value="20"></div>
+          <div class="field"><label for="speed">Speed: <span id="speed-v" class="num">30</span>&times; real time</label><input type="range" id="speed" min="1" max="120" value="30"></div>
           <p class="hint">Changing a setting starts a new run.</p>
         </form>
 
@@ -297,8 +304,9 @@ footer.safety { font-size: 12px; color: var(--muted); border-top: 1px solid var(
             <div class="view" id="view3d"></div>
             <div class="view" id="view2d" hidden></div>
             <div class="clock" aria-live="off"><b id="clock">0:00</b> <span class="small muted" id="clock-sub">not started</span></div>
-            <div class="view-note" id="view-note">Drag to turn, scroll to zoom. Floors are drawn apart so each one can be seen.</div>
+            <div class="alert-bar" id="alert-bar" hidden role="status" aria-live="polite"></div>
           </div>
+          <p class="hint" id="view-note">Drag to turn, scroll to zoom. Floors are drawn apart so each one can be seen.</p>
           <div class="legend" aria-label="Legend">
             <span><i class="dot" style="background:var(--c-ambulatory)"></i>Patient, walks</span>
             <span><i class="sq" style="background:var(--c-wheelchair);border-color:var(--c-wheelchair)"></i>Wheelchair</span>

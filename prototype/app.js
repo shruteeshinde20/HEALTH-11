@@ -228,7 +228,8 @@ function stepSim(seconds) {
     if (L.sim.alerts.length > L.seenAlerts) {
       const fresh = L.sim.alerts.slice(L.seenAlerts);
       L.seenAlerts = L.sim.alerts.length;
-      if (fresh.some((a) => a.status === "new") && $("confirm").value === "manual") {
+      // Pause only while there is no alarm: then nobody can move without a decision.
+      if (fresh.some((a) => a.status === "new") && $("confirm").value === "manual" && L.sim.alarmAt === null) {
         L.playing = false;
         $("play").textContent = "Continue";
         toast("New sensor alert: confirm or dismiss it to continue.");
@@ -306,7 +307,26 @@ function renderLiveUi(force) {
   const t = sim.t;
   $("clock").textContent = mmss(t);
   const sum = E.summarize(sim);
-  $("clock-sub").textContent = sim.done ? (sum.allOut ? "finished: everyone out" : "finished") : L.playing ? "running" : t === 0 ? "not started" : "paused";
+  const waitingAlarm = sim.alarmAt === null;
+  $("clock-sub").textContent = sim.done ? (sum.allOut ? "finished: everyone out" : "finished") : t === 0 && !L.playing ? "press Start" : waitingAlarm ? (L.playing ? "running, no alarm yet" : "paused, no alarm yet") : L.playing ? "running" : "paused";
+  // Message over the view: a waiting alert (with its buttons), or why nobody moves yet.
+  const bar = $("alert-bar");
+  const pending = sim.alerts.find((a) => a.status === "new");
+  if (pending && $("confirm").value === "manual") {
+    bar.className = "alert-bar";
+    bar.innerHTML = `<p><b>${esc(cap(pending.kind))} sensor ${esc(pending.sensor)}</b> at ${esc(S.model.nodes[pending.node].id)}. ${waitingAlarm ? "Nobody moves until you confirm an alert." : "The alarm is already on; confirming tells everyone's routes about this hazard."}</p><div class="row"><button class="btn small danger" data-confirm="${pending.id}">Confirm</button><button class="btn small" data-dismiss="${pending.id}">Dismiss</button></div>`;
+    bar.hidden = false;
+  } else if (waitingAlarm && t > 0 && !sim.done) {
+    bar.className = "alert-bar info";
+    bar.innerHTML = pending
+      ? `<p>Sensor alert at ${esc(S.model.nodes[pending.node].id)}. The commander confirms it at ${mmss(pending.t + S.params.confirm_delay_s)}; then the alarm sounds and people start to move.</p>`
+      : `<p>No alarm yet. People stay where they are until a sensor detects the hazard (about ${Math.round(S.params.sensor_delay_s)} s after it reaches the sensor) and the alert is confirmed.</p>`;
+    bar.hidden = false;
+  } else if (sim.alarmAt !== null && t - sim.alarmAt < 20 && !sim.done) {
+    bar.className = "alert-bar info";
+    bar.innerHTML = `<p>Alarm at ${mmss(sim.alarmAt)}. Each person first reacts or is prepared (walking patients 30–90 s, stretchers 3–15 min with two staff), then moves.</p>`;
+    bar.hidden = false;
+  } else bar.hidden = true;
   const chip = $("alarm-chip");
   if (sim.alarmAt === null) {
     chip.className = sim.alerts.some((a) => a.status === "new") ? "chip warn" : "chip idle";
@@ -365,7 +385,7 @@ function renderLiveUi(force) {
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
-$("alerts").addEventListener("click", (e) => {
+function onAlertClick(e) {
   const c = e.target.closest("[data-confirm]");
   const d = e.target.closest("[data-dismiss]");
   if (c) {
@@ -377,8 +397,16 @@ $("alerts").addEventListener("click", (e) => {
   } else return;
   L.curSnap = L.sim.snapshot();
   L.dirty = true;
+  if (!L.sim.done && !L.playing) {
+    // Carry on running after a decision, so people start to move.
+    L.playing = true;
+    L.lastTs = 0;
+    $("play").textContent = "Pause";
+  }
   renderLiveUi(true);
-});
+}
+$("alerts").addEventListener("click", onAlertClick);
+$("alert-bar").addEventListener("click", onAlertClick);
 
 $("play").addEventListener("click", () => {
   if (!L.sim) return;

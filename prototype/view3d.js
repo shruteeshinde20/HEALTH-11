@@ -93,7 +93,7 @@ export function createView3D(container, model) {
     const top = floorFilter === null ? floors[floors.length - 1] : floorFilter;
     const midY = floorFilter === null ? ((floors.length - 1) * LEVEL) / 2 : (floorFilter - lowest) * LEVEL;
     const aspect = Math.max(0.5, camera.aspect || 1);
-    const half = (Math.max(b.x1 - b.x0, (b.y1 - b.y0) * 1.4) / 2) * 0.82;
+    const half = (Math.max(b.x1 - b.x0, (b.y1 - b.y0) * 1.4) / 2) * 1.0;
     const dist = half / Math.tan((camera.fov * Math.PI) / 360) / Math.min(1, aspect) + (top - lowest) * LEVEL * 0.6;
     const dir = new THREE.Vector3(-0.28, 0.78, 0.86).normalize();
     controls.target.set(0, midY, 0);
@@ -334,8 +334,9 @@ export function createView3D(container, model) {
   // People: body + head, plus beds and wheelchairs for assisted groups
   const maxPeople = Math.max(1, model.people.length + model.cameras.reduce((s, c) => s + c.count, 0) + 2000);
   const bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.55 });
-  const bodies = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.22, 0.85, 4, 10), bodyMat, maxPeople);
-  const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.17, 14, 10), new THREE.MeshStandardMaterial({ color: 0xf1d3b8, roughness: 0.7 }), maxPeople);
+  // People are drawn about 1.4 times life size so they can be seen from above the building.
+  const bodies = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.31, 1.2, 4, 10), bodyMat, maxPeople);
+  const heads = new THREE.InstancedMesh(new THREE.SphereGeometry(0.24, 14, 10), new THREE.MeshStandardMaterial({ color: 0xf1d3b8, roughness: 0.7 }), maxPeople);
   const beds = new THREE.InstancedMesh(new THREE.BoxGeometry(0.95, 0.55, 2.0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }), maxPeople);
   const chairs = new THREE.InstancedMesh(new THREE.BoxGeometry(0.7, 0.55, 0.75), new THREE.MeshStandardMaterial({ color: 0x7c3aed, roughness: 0.6 }), maxPeople);
   for (const im of [bodies, heads, beds, chairs]) {
@@ -501,10 +502,10 @@ export function createView3D(container, model) {
         for (let k = 0; k < s.helpers; k++) {
           const side = k % 2 === 0 ? 1 : -1;
           const off = new THREE.Vector3(side * 0.75, 0, (k < 2 ? 0.6 : -0.6)).applyQuaternion(q);
-          m4.compose(new THREE.Vector3(w.x + off.x, w.y + 0.65, w.z + off.z), q, new THREE.Vector3(1, 1, 1));
+          m4.compose(new THREE.Vector3(w.x + off.x, w.y + 0.92, w.z + off.z), q, new THREE.Vector3(1, 1, 1));
           bodies.setMatrixAt(nb, m4);
           bodies.setColorAt(nb, colour.setHex(COLOURS.people.staff));
-          m4.compose(new THREE.Vector3(w.x + off.x, w.y + 1.42, w.z + off.z), q, new THREE.Vector3(1, 1, 1));
+          m4.compose(new THREE.Vector3(w.x + off.x, w.y + 2.0, w.z + off.z), q, new THREE.Vector3(1, 1, 1));
           heads.setMatrixAt(nb, m4);
           nb++;
         }
@@ -520,18 +521,18 @@ export function createView3D(container, model) {
         nb++;
         for (let k = 0; k < s.helpers; k++) {
           const off = new THREE.Vector3(0, 0, -0.75 - k * 0.5).applyQuaternion(q);
-          m4.compose(new THREE.Vector3(w.x + off.x, w.y + 0.65, w.z + off.z), q, new THREE.Vector3(1, 1, 1));
+          m4.compose(new THREE.Vector3(w.x + off.x, w.y + 0.92, w.z + off.z), q, new THREE.Vector3(1, 1, 1));
           bodies.setMatrixAt(nb, m4);
           bodies.setColorAt(nb, colour.setHex(COLOURS.people.staff));
-          m4.compose(new THREE.Vector3(w.x + off.x, w.y + 1.42, w.z + off.z), q, new THREE.Vector3(1, 1, 1));
+          m4.compose(new THREE.Vector3(w.x + off.x, w.y + 2.0, w.z + off.z), q, new THREE.Vector3(1, 1, 1));
           heads.setMatrixAt(nb, m4);
           nb++;
         }
       } else {
-        m4.compose(new THREE.Vector3(w.x, w.y + 0.65, w.z), q, new THREE.Vector3(1, 1, 1));
+        m4.compose(new THREE.Vector3(w.x, w.y + 0.92, w.z), q, new THREE.Vector3(1, 1, 1));
         bodies.setMatrixAt(nb, m4);
         bodies.setColorAt(nb, colour.setHex(colourHex));
-        m4.compose(new THREE.Vector3(w.x, w.y + 1.42, w.z), q, new THREE.Vector3(1, 1, 1));
+        m4.compose(new THREE.Vector3(w.x, w.y + 2.0, w.z), q, new THREE.Vector3(1, 1, 1));
         heads.setMatrixAt(nb, m4);
         nb++;
       }
