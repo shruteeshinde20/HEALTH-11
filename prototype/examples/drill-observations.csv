@@ -1,0 +1,56 @@
+code,kind,exit,exit_time_s
+DEMO-P005,patient,East Exit,93
+DEMO-P009,patient,Main Entrance Exit,95
+DEMO-P003,patient,Main Entrance Exit,103
+DEMO-P007,patient,East Exit,112
+DEMO-P021,patient,Main Entrance Exit,123
+DEMO-P026,patient,Main Entrance Exit,128
+DEMO-P032,patient,Main Entrance Exit,143
+DEMO-P001,patient,Main Entrance Exit,153
+DEMO-P031,patient,East Exit,165
+DEMO-P028,patient,Main Entrance Exit,174
+DEMO-P010,patient,East Exit,202
+DEMO-P020,patient,Main Entrance Exit,216
+DEMO-P016,patient,Main Entrance Exit,308
+DEMO-P017,patient,Main Entrance Exit,312
+DEMO-P029,patient,Main Entrance Exit,315
+DEMO-P006,patient,East Exit,339
+DEMO-P013,patient,Main Entrance Exit,350
+DEMO-P035,patient,Main Entrance Exit,357
+DEMO-P015,patient,East Exit,363
+DEMO-P034,patient,Main Entrance Exit,388
+DEMO-P002,patient,East Exit,389
+DEMO-P008,patient,Main Entrance Exit,423
+DEMO-P004,patient,Main Entrance Exit,424
+DEMO-P030,patient,Main Entrance Exit,441
+DEMO-P033,patient,East Exit,519
+DEMO-P027,patient,East Exit,528
+DEMO-P014,patient,Main Entrance Exit,548
+DEMO-P018,patient,Main Entrance Exit,566
+DEMO-P039,patient,East Exit,570
+DEMO-P012,patient,East Exit,610
+DEMO-P019,patient,East Exit,625
+DEMO-P011,patient,East Exit,698
+DEMO-P022,patient,East Exit,732
+DEMO-P024,patient,East Exit,748
+DEMO-P040,patient,Main Entrance Exit,786
+DEMO-P038,patient,Main Entrance Exit,802
+DEMO-P037,patient,Main Entrance Exit,837
+DEMO-P023,patient,East Exit,857
+DEMO-P036,patient,East Exit,857
+DEMO-S003,staff,Main Entrance Exit,923
+DEMO-S013,staff,Main Entrance Exit,927
+DEMO-P025,patient,Main Entrance Exit,939
+DEMO-S002,staff,East Exit,996
+DEMO-S006,staff,East Exit,1006
+DEMO-S011,staff,East Exit,1014
+DEMO-S001,staff,Main Entrance Exit,1045
+DEMO-S012,staff,Main Entrance Exit,1083
+DEMO-S010,staff,Main Entrance Exit,1087
+DEMO-S015,staff,East Exit,1118
+DEMO-S004,staff,East Exit,1121
+DEMO-S005,staff,Main Entrance Exit,1138
+DEMO-S009,staff,Main Entrance Exit,1159
+DEMO-S007,staff,East Exit,1170
+DEMO-S008,staff,East Exit,1183
+DEMO-S014,staff,Main Entrance Exit,1198

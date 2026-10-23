@@ -1,0 +1,511 @@
+<title>HEALTH-11 Evacuation Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Prototype that closes the research gaps of HEALTH-11: 3D view, sensors and cameras, staff escorts, crowd movement, exit balancing and drill comparison.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<style>
+/* Layout: left sidebar + content (HEALTH-11 design rules); the Live page is
+   controls | building view | results, like the main app's Live Simulation.
+   Light theme only, by the project's design rule. */
+:root {
+  color-scheme: light;
+  --bg: #F8FAFC;
+  --card: #FFFFFF;
+  --line: #E2E8F0;
+  --primary: #7DB8E8;
+  --primary-soft: #E6F1FB;
+  --success: #BFE8D0;
+  --warning: #FCE9B2;
+  --danger: #F9C5C5;
+  --ink: #1E3A5F;
+  --text: #334155;
+  --muted: #64748B;
+  --outline: #94A3B8;
+  --red: #DC2626;
+  --orange: #EA580C;
+  --green-ink: #166534;
+  --amber-ink: #854D0E;
+  --red-ink: #991B1B;
+  --c-staff: #1E3A5F;
+  --c-visitor: #64748B;
+  --c-ambulatory: #2563EB;
+  --c-wheelchair: #7C3AED;
+  --c-stretcher: #C2410C;
+  --c-ventilator: #BE185D;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(30, 58, 95, 0.05), 0 4px 14px rgba(30, 58, 95, 0.05);
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+}
+* { box-sizing: border-box; }
+h1, h2, h3 { color: var(--ink); text-wrap: balance; margin: 0; line-height: 1.25; }
+h1 { font-size: 22px; font-weight: 700; }
+h2 { font-size: 16px; font-weight: 600; }
+h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+p { margin: 0; }
+a { color: #1D5F96; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid #1D5F96; outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+
+.app { display: grid; grid-template-columns: 228px minmax(0, 1fr); min-height: 100%; }
+.side {
+  background: var(--card);
+  border-right: 1px solid var(--line);
+  padding-block: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: 16px;
+  display: flex; flex-direction: column; gap: 20px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.brand { display: flex; gap: 10px; align-items: center; }
+.brand-mark { width: 34px; height: 34px; border-radius: 9px; background: var(--primary-soft); display: grid; place-items: center; flex: none; }
+.brand-name { font-weight: 700; color: var(--ink); line-height: 1.15; }
+.brand-sub { font-size: 12px; color: var(--muted); }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px;
+  color: var(--text); text-decoration: none; font-weight: 500;
+}
+.nav a:hover { background: var(--bg); }
+.nav a[aria-current="page"] { background: var(--primary-soft); color: var(--ink); font-weight: 600; }
+.nav svg { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.side-note { margin-top: auto; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+.synthetic { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; background: var(--warning); color: var(--amber-ink); }
+
+main {
+  min-width: 0;
+  padding-block: 20px 28px;
+  padding-left: max(16px, 24px);
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 16px;
+}
+.page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.page-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-end; justify-content: space-between; }
+.page-head p { color: var(--muted); max-width: 70ch; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; min-width: 0; }
+.card > h2 + * { margin-top: 10px; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card);
+  color: var(--ink); font-weight: 600; cursor: pointer; min-height: 34px;
+}
+.btn:hover { border-color: var(--outline); }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: var(--ink); }
+.btn.primary:hover { background: #6AAEE3; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: var(--red-ink); }
+.btn.ok { background: var(--success); border-color: var(--success); color: var(--green-ink); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.small { padding: 3px 10px; min-height: 28px; font-size: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card); }
+.seg button { border: 0; background: transparent; padding: 6px 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--primary-soft); color: var(--ink); }
+
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field label, .field .label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.field select, .field input[type="number"], .field input[type="text"], textarea {
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--card); min-height: 34px; width: 100%;
+}
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.check input { margin-top: 3px; }
+.hint { font-size: 12px; color: var(--muted); }
+
+/* Live page */
+.live { display: grid; grid-template-columns: 250px minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.stage { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.view-wrap { position: relative; height: min(68vh, 640px); min-height: 380px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); background: #F1F5F9; }
+.view { position: absolute; inset: 0; }
+.view canvas { display: block; }
+.clock {
+  position: absolute; left: 12px; top: 12px; background: rgba(255, 255, 255, 0.92); border: 1px solid var(--line);
+  border-radius: 10px; padding: 6px 12px; font-variant-numeric: tabular-nums; color: var(--ink); box-shadow: var(--shadow);
+}
+.clock b { font-size: 20px; }
+.view-note { position: absolute; right: 12px; bottom: 10px; font-size: 11px; color: var(--muted); background: rgba(255,255,255,0.85); padding: 2px 8px; border-radius: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.sq { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: none; border: 1px solid var(--outline); }
+
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.stat .v { font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat.warn { background: #FFFBEB; border-color: var(--warning); }
+.stat.bad { background: #FEF2F2; border-color: var(--danger); }
+.stat.good { background: #F0FAF4; border-color: var(--success); }
+
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.chip.idle { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.chip.on { background: var(--danger); color: var(--red-ink); }
+.chip.ok { background: var(--success); color: var(--green-ink); }
+.chip.warn { background: var(--warning); color: var(--amber-ink); }
+
+.alerts { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow-y: auto; }
+.alert { border: 1px solid var(--line); border-left: 4px solid var(--orange); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.alert.confirmed { border-left-color: var(--red); }
+.alert.dismissed { border-left-color: var(--outline); opacity: 0.75; }
+.alert .t { font-size: 12px; color: var(--muted); }
+.log { font-size: 12px; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.log div { display: grid; grid-template-columns: 52px 1fr; gap: 6px; }
+.log time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.bars { display: flex; flex-direction: column; gap: 6px; }
+.bar { display: grid; grid-template-columns: minmax(0, 1fr) 40px; gap: 8px; align-items: center; font-size: 12px; }
+.bar .track { grid-column: 1 / -1; height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; border: 1px solid var(--line); }
+.bar .fill { height: 100%; background: var(--primary); }
+
+/* Tables */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { background: var(--bg); color: var(--muted); font-weight: 600; font-size: 12px; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td input[type="number"] { width: 96px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; text-align: right; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.tag.sourced { background: var(--success); color: var(--green-ink); }
+.tag.derived { background: var(--primary-soft); color: var(--ink); }
+.tag.assumed { background: var(--warning); color: var(--amber-ink); }
+.tag.policy { background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.tag.open { background: var(--danger); color: var(--red-ink); }
+
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.chart { min-width: 0; }
+.chart svg { max-width: 100%; height: auto; display: block; }
+.banner { border: 1px solid var(--warning); background: #FFFBEB; color: var(--amber-ink); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.banner.info { border-color: var(--line); background: var(--primary-soft); color: var(--ink); }
+.banner.error { border-color: var(--danger); background: #FEF2F2; color: var(--red-ink); }
+.progress { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.progress div { height: 100%; width: 0; background: var(--primary); transition: width 0.2s; }
+.file { display: flex; flex-direction: column; gap: 6px; border: 1px dashed var(--outline); border-radius: 10px; padding: 12px; }
+.file input[type="file"] { font-size: 12px; max-width: 100%; }
+footer.safety { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+.toast { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: #FFFFFF; padding: 10px 14px; border-radius: 10px; box-shadow: var(--shadow); font-size: 13px; z-index: 20; }
+.loading { display: grid; place-items: center; min-height: 240px; color: var(--muted); }
+
+@media (max-width: 1280px) {
+  .live { grid-template-columns: 240px minmax(0, 1fr); }
+  .live > .results { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+}
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; height: auto; flex-direction: column; padding-right: max(16px, env(safe-area-inset-right, 0px)); border-right: 0; border-bottom: 1px solid var(--line); }
+  .nav { flex-direction: row; flex-wrap: wrap; }
+  .side-note { display: none; }
+  main { padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+  .live { grid-template-columns: minmax(0, 1fr); }
+  .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); }
+  .view-wrap { height: 60vh; min-height: 320px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="app">
+  <aside class="side" aria-label="Sections">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1E3A5F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V8l9-5 9 5v13"/><path d="M9 21v-6h6v6"/><path d="M12 7v4M10 9h4"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">HEALTH-11</div>
+        <div class="brand-sub">Evacuation prototype</div>
+      </div>
+    </div>
+    <nav class="nav" id="nav">
+      <a href="#live" data-page="live"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Live 3D view</a>
+      <a href="#devices" data-page="devices"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></svg>Sensors &amp; cameras</a>
+      <a href="#compare" data-page="compare"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Compare plans</a>
+      <a href="#drill" data-page="drill"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 4 8-8"/><path d="M14 8h6v6"/></svg>Drill check</a>
+      <a href="#building" data-page="building"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M8 7h2M14 7h2M8 11h2M14 11h2M10 21v-4h4v4"/></svg>Building data</a>
+      <a href="#parameters" data-page="parameters"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Parameters &amp; sources</a>
+      <a href="#gaps" data-page="gaps"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>Gaps &amp; limits</a>
+    </nav>
+    <div class="side-note">
+      <span class="synthetic">Synthetic data</span>
+      <p style="margin-top:8px">Supports planning and training. It does not replace a hospital's official emergency procedures or fire-safety professionals.</p>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div class="loading" id="boot">Loading the demo building&hellip;</div>
+
+    <!-- LIVE -->
+    <section class="page" id="page-live" hidden>
+      <div class="page-head">
+        <div class="stack" style="gap:4px">
+          <h1>Live 3D view</h1>
+          <p id="building-line">Watch an evacuation unfold floor by floor, with sensors, staff escorts and crowding.</p>
+        </div>
+        <span class="synthetic" id="synthetic-tag">Synthetic data</span>
+      </div>
+      <div class="live">
+        <form class="card stack controls" id="live-form" aria-label="Run settings">
+          <h2>Run settings</h2>
+          <div class="field"><label for="sc">Scenario</label><select id="sc"></select></div>
+          <p class="hint" id="sc-note"></p>
+          <div class="field"><label for="alg">Route method</label>
+            <select id="alg"><option value="dijkstra">Dijkstra (distance + risk)</option><option value="astar">A* (distance + risk)</option><option value="bfs">BFS (fewest steps)</option><option value="dfs">DFS (first path found)</option></select>
+          </div>
+          <div class="field"><label for="alarm">Alarm</label>
+            <select id="alarm"><option value="sensors">Sensors detect, commander confirms</option><option value="start">Alarm sounds at the start</option></select>
+          </div>
+          <div class="field"><label for="confirm">Commander decisions</label>
+            <select id="confirm"><option value="manual">I confirm each alert</option><option value="auto">Automatic after the confirmation time</option></select>
+          </div>
+          <label class="check"><input type="checkbox" id="balance"> Balance exits (Dijkstra and A*: count people already sent to each exit)</label>
+          <label class="check"><input type="checkbox" id="visitors" checked> Add visitors counted by cameras</label>
+          <div class="field"><label for="seed">Random seed</label><input type="number" id="seed" value="1" min="1" max="999999" step="1"></div>
+          <div class="row">
+            <button class="btn primary" type="button" id="play">Start</button>
+            <button class="btn" type="button" id="step">+10 s</button>
+            <button class="btn" type="button" id="reset">Reset</button>
+          </div>
+          <div class="field"><label for="speed">Speed: <span id="speed-v" class="num">20</span>&times; real time</label><input type="range" id="speed" min="1" max="120" value="20"></div>
+          <p class="hint">Changing a setting starts a new run.</p>
+        </form>
+
+        <div class="stage">
+          <div class="row" style="justify-content:space-between">
+            <div class="seg" role="group" aria-label="View">
+              <button type="button" id="v3d" aria-pressed="true">3D</button>
+              <button type="button" id="v2d" aria-pressed="false">2D plan</button>
+            </div>
+            <div class="row">
+              <label class="small muted" for="floor">Show</label>
+              <select id="floor" class="btn small" style="font-weight:500"></select>
+              <label class="check small"><input type="checkbox" id="labels" checked> Names</label>
+              <button type="button" class="btn small" id="camera-reset">Reset camera</button>
+            </div>
+          </div>
+          <div class="view-wrap">
+            <div class="view" id="view3d"></div>
+            <div class="view" id="view2d" hidden></div>
+            <div class="clock" aria-live="off"><b id="clock">0:00</b> <span class="small muted" id="clock-sub">not started</span></div>
+            <div class="view-note" id="view-note">Drag to turn, scroll to zoom. Floors are drawn apart so each one can be seen.</div>
+          </div>
+          <div class="legend" aria-label="Legend">
+            <span><i class="dot" style="background:var(--c-ambulatory)"></i>Patient, walks</span>
+            <span><i class="sq" style="background:var(--c-wheelchair);border-color:var(--c-wheelchair)"></i>Wheelchair</span>
+            <span><i class="sq" style="background:var(--c-stretcher);border-color:var(--c-stretcher)"></i>Stretcher</span>
+            <span><i class="sq" style="background:var(--c-ventilator);border-color:var(--c-ventilator)"></i>Ventilator</span>
+            <span><i class="dot" style="background:var(--c-staff)"></i>Staff</span>
+            <span><i class="dot" style="background:var(--c-visitor)"></i>Visitor</span>
+            <span><i class="sq" style="background:#F9C5C5;border-color:#DC2626"></i>Fire</span>
+            <span><i class="sq" style="background:#CBD5E1"></i>Smoke</span>
+            <span><i class="dot" style="background:#fff;border:2px solid var(--orange)"></i>Waiting for staff</span>
+            <span><i class="dot" style="background:#fff;border:2px solid var(--c-wheelchair)"></i>No safe route, sheltering</span>
+            <span><i class="dot" style="background:#fff;border:2px solid var(--red)"></i>Reached by hazard</span>
+          </div>
+        </div>
+
+        <div class="results stack">
+          <div class="card stack">
+            <div class="row" style="justify-content:space-between"><h2>Status</h2><span class="chip idle" id="alarm-chip">No alarm</span></div>
+            <div class="stats" id="stats"></div>
+          </div>
+          <div class="card stack">
+            <div class="row" style="justify-content:space-between"><h2>Alerts</h2><span class="small muted" id="alert-count">0</span></div>
+            <div class="alerts" id="alerts"><p class="hint">No sensor has raised an alert yet.</p></div>
+          </div>
+          <div class="card stack">
+            <h2>People out over time</h2>
+            <div class="chart" id="live-chart"></div>
+          </div>
+          <div class="card stack">
+            <h2>Exits used</h2>
+            <div class="bars" id="exit-bars"></div>
+          </div>
+          <div class="card stack">
+            <h2>What happened</h2>
+            <div class="log" id="log"><p class="hint">Events appear here as the run goes on.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DEVICES -->
+    <section class="page" id="page-devices" hidden>
+      <div class="page-head">
+        <div class="stack" style="gap:4px">
+          <h1>Sensors &amp; cameras</h1>
+          <p>Cameras count people the patient list cannot know about (visitors). Smoke, heat and gas sensors raise alerts; the commander confirms them before routes change. Here a device simulator stands in for the hardware.</p>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="card stack">
+          <h2>Cameras: people counted</h2>
+          <p class="hint">Each count becomes that many visitors in the next run. Edit a count, or import a counts file.</p>
+          <div class="table-wrap"><table><thead><tr><th>Camera</th><th>Place</th><th class="n">People</th></tr></thead><tbody id="cam-rows"></tbody></table></div>
+          <div class="file">
+            <label class="small" for="cam-file"><b>Import camera counts (CSV)</b> &#183; columns camera, count, time</label>
+            <input type="file" id="cam-file" accept=".csv,text/csv">
+          </div>
+          <div class="row"><button class="btn" type="button" id="cam-sim">Simulate a new camera reading</button><span class="hint" id="cam-sim-note"></span></div>
+        </div>
+        <div class="card stack">
+          <h2>Device simulator</h2>
+          <p class="hint">Schedule a false alarm to practise the commander's decision. It is used in the next Live run.</p>
+          <div class="grid2" style="gap:10px">
+            <div class="field"><label for="fa-sensor">Sensor</label><select id="fa-sensor"></select></div>
+            <div class="field"><label for="fa-time">At second</label><input type="number" id="fa-time" value="20" min="1" max="3600"></div>
+          </div>
+          <div class="row"><button class="btn" type="button" id="fa-add">Add false alarm</button><button class="btn" type="button" id="fa-clear">Clear all</button></div>
+          <ul id="fa-list" class="small" style="margin:0;padding-left:18px"></ul>
+          <div class="banner info">How real devices would connect: a sensor or people-counting system sends an event (device id, kind, place, value, time) to the HEALTH-11 server; the server checks the device belongs to that hospital and shows the alert to the commander. This prototype does not connect to real hardware.</div>
+        </div>
+      </div>
+      <div class="card stack">
+        <div class="row" style="justify-content:space-between"><h2>Sensors in the building</h2><span class="small muted" id="sensor-count"></span></div>
+        <p class="hint">Smoke detectors see smoke and fire, heat detectors see fire, gas detectors see chemical spills. Each answers after the sensor response time set in Parameters. Status shows the current Live run.</p>
+        <div class="table-wrap"><table><thead><tr><th>Sensor</th><th>Kind</th><th>Place</th><th>Floor</th><th>Status in the live run</th></tr></thead><tbody id="sensor-rows"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- COMPARE -->
+    <section class="page" id="page-compare" hidden>
+      <div class="page-head">
+        <div class="stack" style="gap:4px">
+          <h1>Compare plans</h1>
+          <p>Run the same scenario many times. People's speeds and delays vary from run to run, so results are shown as an average with the fastest and slowest run.</p>
+        </div>
+      </div>
+      <form class="card" id="cmp-form">
+        <div class="grid3">
+          <div class="field"><label for="cmp-sc">Scenario</label><select id="cmp-sc"></select></div>
+          <div class="field"><label for="cmp-runs">Runs per plan</label><select id="cmp-runs"><option value="5">5</option><option value="10" selected>10</option><option value="20">20</option></select></div>
+          <div class="field"><label for="cmp-staff">Staff on duty</label><input type="number" id="cmp-staff" min="0" step="1"><span class="hint" id="cmp-staff-hint"></span></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <label class="check"><input type="checkbox" id="cmp-balance" checked> Also run Dijkstra and A* with exit balancing</label>
+          <label class="check"><input type="checkbox" id="cmp-visitors" checked> Include camera visitors</label>
+          <button class="btn primary" type="submit" id="cmp-run">Run comparison</button>
+        </div>
+        <div class="progress" style="margin-top:12px" hidden id="cmp-progress"><div></div></div>
+      </form>
+      <div id="cmp-out" class="stack"><div class="card"><p class="hint">Choose a scenario and run the comparison. Eight plans &#215; 10 runs takes a few seconds.</p></div></div>
+    </section>
+
+    <!-- DRILL -->
+    <section class="page" id="page-drill" hidden>
+      <div class="page-head">
+        <div class="stack" style="gap:4px">
+          <h1>Drill check</h1>
+          <p>Compare the model with what happened in a real drill: when each person left and by which exit. The gap shows how far to trust the model, and which settings to change.</p>
+        </div>
+      </div>
+      <div class="banner" id="drill-banner">The drill record loaded now is <b>made up</b> (random numbers) so the page can be shown. It is not a real drill and says nothing about the model's accuracy. Import your hospital's own drill record to check the model.</div>
+      <form class="card" id="drill-form">
+        <div class="grid3">
+          <div class="field"><label for="drill-sc">Scenario that matches the drill</label><select id="drill-sc"></select></div>
+          <div class="field"><label for="drill-runs">Model runs</label><select id="drill-runs"><option value="10" selected>10</option><option value="20">20</option></select></div>
+          <div class="field"><label for="drill-alg">Route method</label><select id="drill-alg"><option value="dijkstra">Dijkstra</option><option value="astar">A*</option><option value="bfs">BFS</option><option value="dfs">DFS</option></select></div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div class="file" style="flex:1;min-width:240px">
+            <label class="small" for="drill-file"><b>Import a drill record (CSV)</b> &#183; columns code, kind, exit, exit_time_s</label>
+            <input type="file" id="drill-file" accept=".csv,text/csv">
+          </div>
+          <label class="check"><input type="checkbox" id="drill-visitors"> Include camera visitors (only if visitors were in the drill)</label>
+          <button class="btn primary" type="submit">Compare with the drill</button>
+        </div>
+      </form>
+      <div id="drill-out" class="stack"></div>
+    </section>
+
+    <!-- BUILDING -->
+    <section class="page" id="page-building" hidden>
+      <div class="page-head">
+        <div class="stack" style="gap:4px">
+          <h1>Building data</h1>
+          <p>Load a building from the HEALTH-11 export files or from this prototype's own file. Everything is checked before it is used.</p>
+        </div>
+      </div>
+      <div id="data-msg"></div>
+      <div class="grid2">
+        <div class="card stack">
+          <h2>From HEALTH-11 CSV files</h2>
+          <p class="hint">The floor plan export (record_type, name, type, x, y, &#8230;), plus patients and staff exports. One floor per load.</p>
+          <div class="field"><label for="h11-floor">Floor number of this plan</label><input type="number" id="h11-floor" value="0" min="-5" max="100"></div>
+          <div class="file"><label class="small" for="h11-plan"><b>Floor plan CSV</b></label><input type="file" id="h11-plan" accept=".csv,text/csv"></div>
+          <div class="file"><label class="small" for="h11-patients"><b>Patients CSV</b> (optional)</label><input type="file" id="h11-patients" accept=".csv,text/csv"></div>
+          <div class="file"><label class="small" for="h11-staff"><b>Staff CSV</b> (optional)</label><input type="file" id="h11-staff" accept=".csv,text/csv"></div>
+          <div class="file"><label class="small" for="h11-devices"><b>Sensors and cameras CSV</b> (optional) &#183; id, kind, place, count</label><input type="file" id="h11-devices" accept=".csv,text/csv"></div>
+          <div class="row"><button class="btn primary" type="button" id="h11-load">Load these files</button><button class="btn" type="button" id="riverside">Load the Riverside example</button></div>
+        </div>
+        <div class="card stack">
+          <h2>Other files</h2>
+          <div class="file"><label class="small" for="json-file"><b>Prototype building file (JSON)</b> &#183; several floors, devices and scenarios</label><input type="file" id="json-file" accept=".json,application/json"></div>
+          <div class="file"><label class="small" for="fire-file"><b>Fire-model results (CSV)</b> &#183; place, hazard, arrival_s, severity</label><input type="file" id="fire-file" accept=".csv,text/csv"><span class="hint">Times exported from a fire model (for example a CFD tool). They become a scenario named "Imported fire model". The prototype does not run a fire model itself.</span></div>
+          <div class="row"><button class="btn" type="button" id="fire-example">Use the example fire-model file</button><button class="btn" type="button" id="demo">Load the demo building again</button></div>
+          <h2 style="margin-top:6px">Copy the building file</h2>
+          <p class="hint">The current building as JSON, to keep or to load later.</p>
+          <textarea id="export" rows="6" readonly spellcheck="false" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px"></textarea>
+          <div class="row"><button class="btn" type="button" id="copy-export">Copy</button></div>
+        </div>
+      </div>
+      <div class="card stack">
+        <div class="row" style="justify-content:space-between"><h2>What is loaded</h2><span class="small muted" id="data-summary"></span></div>
+        <div class="table-wrap"><table><thead><tr><th>Place</th><th>Type</th><th>Floor</th><th class="n">Size (m)</th><th class="n">Patients</th><th class="n">Staff</th><th>Devices</th></tr></thead><tbody id="place-rows"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- PARAMETERS -->
+    <section class="page" id="page-parameters" hidden>
+      <div class="page-head">
+        <div class="stack" style="gap:4px">
+          <h1>Parameters &amp; sources</h1>
+          <p>Every number the model uses, with its source. Values marked <span class="tag assumed">Assumed</span> have no published source and should be replaced with the hospital's own measurements.</p>
+        </div>
+        <button class="btn" type="button" id="param-reset">Reset all to the listed values</button>
+      </div>
+      <div id="param-groups" class="stack"></div>
+      <div class="card stack">
+        <h2>Sources</h2>
+        <ol id="sources" class="small" style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px"></ol>
+      </div>
+    </section>
+
+    <!-- GAPS -->
+    <section class="page" id="page-gaps" hidden>
+      <div class="page-head">
+        <div class="stack" style="gap:4px">
+          <h1>Gaps &amp; limits</h1>
+          <p>The research gaps and known limits listed in the seminar slides, what this prototype adds for each, and what is still open.</p>
+        </div>
+      </div>
+      <div class="card stack">
+        <h2>Research gaps (slide "Research Gaps")</h2>
+        <div class="table-wrap"><table id="gap-table"><thead><tr><th>Gap</th><th>In HEALTH-11</th><th>Added in this prototype</th><th>Still open</th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card stack">
+        <h2>Known limits (slide "Expected Results")</h2>
+        <div class="table-wrap"><table id="limit-table"><thead><tr><th>Limit</th><th>What the prototype does now</th><th>Where to see it</th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="card stack">
+        <h2>Still not done</h2>
+        <ul id="open-list" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px"></ul>
+      </div>
+    </section>
+
+    <footer class="safety">HEALTH-11 supports planning and training. It does not replace a hospital's official emergency procedures or fire-safety professionals. All people and places in the examples are made up.</footer>
+  </main>
+</div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script type="module" src="./app.js"></script>

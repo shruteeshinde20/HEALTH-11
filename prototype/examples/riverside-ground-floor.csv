@@ -1,0 +1,30 @@
+record_type,name,type,x,y,capacity,is_blocked,is_evacuation_lift,width_m,length_m,from_node,to_node,distance,width,max_flow,wheelchair_accessible,stretcher_accessible
+node,Corridor West,corridor,15,20,40,false,false,20,3,,,,,,,
+node,Corridor Centre,corridor,35,20,40,false,false,20,3,,,,,,,
+node,Corridor East,corridor,55,20,40,false,false,20,3,,,,,,,
+node,Stair West,stair,3,20,30,false,false,4,4,,,,,,,
+node,Stair East,stair,62,12,30,false,false,4,4,,,,,,,
+node,Ward A,ward,10,12,20,false,false,14,10,,,,,,,
+node,ICU,icu,24,12,8,false,false,10,10,,,,,,,
+node,Ward B,ward,38,12,20,false,false,14,10,,,,,,,
+node,Operating Theatre,room,52,12,6,false,false,10,10,,,,,,,
+node,Emergency,ward,12,28,12,false,false,14,8,,,,,,,
+node,Reception,room,35,28,30,false,false,10,8,,,,,,,
+node,Pharmacy,room,52,28,6,false,false,8,8,,,,,,,
+node,Main Exit,exit,35,33,0,false,false,3,2,,,,,,,
+node,East Exit,exit,66,20,0,false,false,2,3,,,,,,,
+node,Assembly Point,assembly,35,45,0,false,false,10,10,,,,,,,
+edge,,,,,,false,,,,Corridor West,Corridor Centre,20.0,2.4,60,true,true
+edge,,,,,,false,,,,Corridor Centre,Corridor East,20.0,2.4,60,true,true
+edge,,,,,,false,,,,Stair West,Corridor West,12.0,1.5,40,false,false
+edge,,,,,,false,,,,Stair East,Corridor East,10.6,1.5,40,false,false
+edge,,,,,,false,,,,Ward A,Corridor West,9.4,2.4,60,true,true
+edge,,,,,,false,,,,ICU,Corridor Centre,13.6,2.4,60,true,true
+edge,,,,,,false,,,,Ward B,Corridor Centre,8.5,2.4,60,true,true
+edge,,,,,,false,,,,Operating Theatre,Corridor East,8.5,2.4,60,true,true
+edge,,,,,,false,,,,Emergency,Corridor West,8.5,2.4,60,true,true
+edge,,,,,,false,,,,Reception,Corridor Centre,8.0,2.4,60,true,true
+edge,,,,,,false,,,,Pharmacy,Corridor East,8.5,2.4,60,true,true
+edge,,,,,,false,,,,Main Exit,Reception,5.0,2.4,60,true,true
+edge,,,,,,false,,,,Main Exit,Assembly Point,12.0,2.4,60,true,true
+edge,,,,,,false,,,,East Exit,Corridor East,11.0,2.4,60,true,true

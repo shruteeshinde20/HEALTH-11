@@ -1,0 +1,12 @@
+place,hazard,arrival_s,severity
+Kitchen,smoke,0,4
+G Corridor East,smoke,95,4
+Pharmacy,smoke,160,4
+G Corridor Centre,smoke,210,4
+Stair B G,smoke,150,4
+East Exit,smoke,240,4
+OPD,smoke,300,4
+Stair B 1,smoke,260,4
+1 Corridor East,smoke,330,4
+Ward 1B,smoke,420,4
+G Corridor West,smoke,450,4

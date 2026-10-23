@@ -1,0 +1,9 @@
+staff_code,full_name,role,test_data,hospital,building,floor_number,place
+RV-S001,Synthetic Doctor 01,doctor,true,Riverside Hospital (made-up),Main Building,0,Emergency
+RV-S002,Synthetic Nurse 02,nurse,true,Riverside Hospital (made-up),Main Building,0,Emergency
+RV-S003,Synthetic Nurse 03,nurse,true,Riverside Hospital (made-up),Main Building,0,Ward A
+RV-S004,Synthetic Nurse 04,nurse,true,Riverside Hospital (made-up),Main Building,0,Ward B
+RV-S005,Synthetic Doctor 05,doctor,true,Riverside Hospital (made-up),Main Building,0,ICU
+RV-S006,Synthetic Nurse 06,nurse,true,Riverside Hospital (made-up),Main Building,0,ICU
+RV-S007,Synthetic Porter 07,porter,true,Riverside Hospital (made-up),Main Building,0,Corridor Centre
+RV-S008,Synthetic Nurse 08,nurse,true,Riverside Hospital (made-up),Main Building,0,Operating Theatre

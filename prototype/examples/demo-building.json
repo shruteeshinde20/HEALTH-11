@@ -1,0 +1,1152 @@
+{
+ "name": "Demo Hospital (made-up)",
+ "synthetic": true,
+ "note": "MADE-UP data for demonstration. Not a real hospital, patient or staff member.",
+ "floors": [
+  {
+   "number": 0,
+   "name": "Ground floor"
+  },
+  {
+   "number": 1,
+   "name": "First floor"
+  },
+  {
+   "number": 2,
+   "name": "Second floor"
+  }
+ ],
+ "places": [
+  {
+   "id": "G Corridor West",
+   "type": "corridor",
+   "x": 24,
+   "y": 30,
+   "w": 14,
+   "l": 3,
+   "floor": 0
+  },
+  {
+   "id": "G Corridor Centre",
+   "type": "corridor",
+   "x": 48,
+   "y": 30,
+   "w": 34,
+   "l": 3,
+   "floor": 0
+  },
+  {
+   "id": "G Corridor East",
+   "type": "corridor",
+   "x": 72,
+   "y": 30,
+   "w": 14,
+   "l": 3,
+   "floor": 0
+  },
+  {
+   "id": "Stair A G",
+   "type": "stair",
+   "x": 15,
+   "y": 30,
+   "w": 4,
+   "l": 4,
+   "floor": 0
+  },
+  {
+   "id": "Stair B G",
+   "type": "stair",
+   "x": 81,
+   "y": 30,
+   "w": 4,
+   "l": 4,
+   "floor": 0
+  },
+  {
+   "id": "Lift E G",
+   "type": "lift",
+   "x": 48,
+   "y": 41,
+   "w": 3,
+   "l": 3,
+   "evacLift": true,
+   "floor": 0
+  },
+  {
+   "id": "Entrance Ramp",
+   "type": "ramp",
+   "x": 18,
+   "y": 38,
+   "w": 4,
+   "l": 6,
+   "floor": 0
+  },
+  {
+   "id": "Main Entrance Exit",
+   "type": "exit",
+   "x": 10,
+   "y": 38,
+   "w": 2,
+   "l": 3,
+   "floor": 0
+  },
+  {
+   "id": "East Exit",
+   "type": "exit",
+   "x": 85,
+   "y": 30,
+   "w": 2,
+   "l": 3,
+   "floor": 0
+  },
+  {
+   "id": "Emergency",
+   "type": "ward",
+   "x": 24,
+   "y": 22,
+   "w": 20,
+   "l": 12,
+   "floor": 0
+  },
+  {
+   "id": "OPD",
+   "type": "room",
+   "x": 48,
+   "y": 22,
+   "w": 16,
+   "l": 12,
+   "floor": 0
+  },
+  {
+   "id": "Pharmacy",
+   "type": "room",
+   "x": 72,
+   "y": 22,
+   "w": 10,
+   "l": 12,
+   "floor": 0
+  },
+  {
+   "id": "Radiology",
+   "type": "room",
+   "x": 30,
+   "y": 38,
+   "w": 8,
+   "l": 6,
+   "floor": 0
+  },
+  {
+   "id": "Kitchen",
+   "type": "room",
+   "x": 66,
+   "y": 38,
+   "w": 8,
+   "l": 6,
+   "floor": 0
+  },
+  {
+   "id": "1 Corridor West",
+   "type": "corridor",
+   "x": 24,
+   "y": 30,
+   "w": 14,
+   "l": 3,
+   "floor": 1
+  },
+  {
+   "id": "1 Corridor Centre",
+   "type": "corridor",
+   "x": 48,
+   "y": 30,
+   "w": 34,
+   "l": 3,
+   "floor": 1
+  },
+  {
+   "id": "1 Corridor East",
+   "type": "corridor",
+   "x": 72,
+   "y": 30,
+   "w": 14,
+   "l": 3,
+   "floor": 1
+  },
+  {
+   "id": "Stair A 1",
+   "type": "stair",
+   "x": 15,
+   "y": 30,
+   "w": 4,
+   "l": 4,
+   "floor": 1
+  },
+  {
+   "id": "Stair B 1",
+   "type": "stair",
+   "x": 81,
+   "y": 30,
+   "w": 4,
+   "l": 4,
+   "floor": 1
+  },
+  {
+   "id": "Lift E 1",
+   "type": "lift",
+   "x": 48,
+   "y": 41,
+   "w": 3,
+   "l": 3,
+   "evacLift": true,
+   "floor": 1
+  },
+  {
+   "id": "Ward 1A",
+   "type": "ward",
+   "x": 24,
+   "y": 22,
+   "w": 20,
+   "l": 12,
+   "floor": 1
+  },
+  {
+   "id": "Ward 1B",
+   "type": "ward",
+   "x": 72,
+   "y": 22,
+   "w": 20,
+   "l": 12,
+   "floor": 1
+  },
+  {
+   "id": "ICU",
+   "type": "icu",
+   "x": 48,
+   "y": 22,
+   "w": 12,
+   "l": 12,
+   "floor": 1
+  },
+  {
+   "id": "Nurses Station 1",
+   "type": "room",
+   "x": 42,
+   "y": 38,
+   "w": 6,
+   "l": 6,
+   "floor": 1
+  },
+  {
+   "id": "Store Room 1",
+   "type": "room",
+   "x": 54,
+   "y": 38,
+   "w": 6,
+   "l": 6,
+   "floor": 1
+  },
+  {
+   "id": "2 Corridor West",
+   "type": "corridor",
+   "x": 24,
+   "y": 30,
+   "w": 14,
+   "l": 3,
+   "floor": 2
+  },
+  {
+   "id": "2 Corridor Centre",
+   "type": "corridor",
+   "x": 48,
+   "y": 30,
+   "w": 34,
+   "l": 3,
+   "floor": 2
+  },
+  {
+   "id": "2 Corridor East",
+   "type": "corridor",
+   "x": 72,
+   "y": 30,
+   "w": 14,
+   "l": 3,
+   "floor": 2
+  },
+  {
+   "id": "Stair A 2",
+   "type": "stair",
+   "x": 15,
+   "y": 30,
+   "w": 4,
+   "l": 4,
+   "floor": 2
+  },
+  {
+   "id": "Stair B 2",
+   "type": "stair",
+   "x": 81,
+   "y": 30,
+   "w": 4,
+   "l": 4,
+   "floor": 2
+  },
+  {
+   "id": "Lift E 2",
+   "type": "lift",
+   "x": 48,
+   "y": 41,
+   "w": 3,
+   "l": 3,
+   "evacLift": true,
+   "floor": 2
+  },
+  {
+   "id": "Ward 2A",
+   "type": "ward",
+   "x": 24,
+   "y": 22,
+   "w": 20,
+   "l": 12,
+   "floor": 2
+  },
+  {
+   "id": "Ward 2B",
+   "type": "ward",
+   "x": 72,
+   "y": 22,
+   "w": 20,
+   "l": 12,
+   "floor": 2
+  },
+  {
+   "id": "Operating Theatre",
+   "type": "room",
+   "x": 48,
+   "y": 22,
+   "w": 14,
+   "l": 12,
+   "floor": 2
+  },
+  {
+   "id": "Recovery",
+   "type": "ward",
+   "x": 42,
+   "y": 38,
+   "w": 6,
+   "l": 6,
+   "floor": 2
+  },
+  {
+   "id": "Store Room 2",
+   "type": "room",
+   "x": 54,
+   "y": 38,
+   "w": 6,
+   "l": 6,
+   "floor": 2
+  }
+ ],
+ "paths": [
+  {
+   "a": "G Corridor West",
+   "b": "G Corridor Centre",
+   "length": 24,
+   "width": 2.4
+  },
+  {
+   "a": "G Corridor Centre",
+   "b": "G Corridor East",
+   "length": 24,
+   "width": 2.4
+  },
+  {
+   "a": "G Corridor West",
+   "b": "Stair A G",
+   "length": 9,
+   "width": 1.2
+  },
+  {
+   "a": "G Corridor East",
+   "b": "Stair B G",
+   "length": 9,
+   "width": 1.2
+  },
+  {
+   "a": "G Corridor Centre",
+   "b": "Lift E G",
+   "length": 11,
+   "width": 1.2
+  },
+  {
+   "a": "G Corridor West",
+   "b": "Entrance Ramp",
+   "length": 10,
+   "width": 2.4
+  },
+  {
+   "a": "Entrance Ramp",
+   "b": "Main Entrance Exit",
+   "length": 8,
+   "width": 2.4
+  },
+  {
+   "a": "G Corridor East",
+   "b": "East Exit",
+   "length": 13,
+   "width": 1.2
+  },
+  {
+   "a": "Emergency",
+   "b": "G Corridor West",
+   "length": 8,
+   "width": 1.2
+  },
+  {
+   "a": "OPD",
+   "b": "G Corridor Centre",
+   "length": 8,
+   "width": 1.2
+  },
+  {
+   "a": "Pharmacy",
+   "b": "G Corridor East",
+   "length": 8,
+   "width": 1.2
+  },
+  {
+   "a": "Radiology",
+   "b": "G Corridor West",
+   "length": 10,
+   "width": 1.2
+  },
+  {
+   "a": "Kitchen",
+   "b": "G Corridor East",
+   "length": 10,
+   "width": 1.2
+  },
+  {
+   "a": "1 Corridor West",
+   "b": "1 Corridor Centre",
+   "length": 24,
+   "width": 2.4
+  },
+  {
+   "a": "1 Corridor Centre",
+   "b": "1 Corridor East",
+   "length": 24,
+   "width": 2.4
+  },
+  {
+   "a": "1 Corridor West",
+   "b": "Stair A 1",
+   "length": 9,
+   "width": 1.2
+  },
+  {
+   "a": "1 Corridor East",
+   "b": "Stair B 1",
+   "length": 9,
+   "width": 1.2
+  },
+  {
+   "a": "1 Corridor Centre",
+   "b": "Lift E 1",
+   "length": 11,
+   "width": 1.2
+  },
+  {
+   "a": "Ward 1A",
+   "b": "1 Corridor West",
+   "length": 8,
+   "width": 1.2
+  },
+  {
+   "a": "Ward 1B",
+   "b": "1 Corridor East",
+   "length": 8,
+   "width": 1.2
+  },
+  {
+   "a": "ICU",
+   "b": "1 Corridor Centre",
+   "length": 8,
+   "width": 1.2
+  },
+  {
+   "a": "Nurses Station 1",
+   "b": "1 Corridor Centre",
+   "length": 10,
+   "width": 1.2
+  },
+  {
+   "a": "Store Room 1",
+   "b": "1 Corridor Centre",
+   "length": 10,
+   "width": 1.2
+  },
+  {
+   "a": "2 Corridor West",
+   "b": "2 Corridor Centre",
+   "length": 24,
+   "width": 2.4
+  },
+  {
+   "a": "2 Corridor Centre",
+   "b": "2 Corridor East",
+   "length": 24,
+   "width": 2.4
+  },
+  {
+   "a": "2 Corridor West",
+   "b": "Stair A 2",
+   "length": 9,
+   "width": 1.2
+  },
+  {
+   "a": "2 Corridor East",
+   "b": "Stair B 2",
+   "length": 9,
+   "width": 1.2
+  },
+  {
+   "a": "2 Corridor Centre",
+   "b": "Lift E 2",
+   "length": 11,
+   "width": 1.2
+  },
+  {
+   "a": "Ward 2A",
+   "b": "2 Corridor West",
+   "length": 8,
+   "width": 1.2
+  },
+  {
+   "a": "Ward 2B",
+   "b": "2 Corridor East",
+   "length": 8,
+   "width": 1.2
+  },
+  {
+   "a": "Operating Theatre",
+   "b": "2 Corridor Centre",
+   "length": 8,
+   "width": 1.2
+  },
+  {
+   "a": "Recovery",
+   "b": "2 Corridor Centre",
+   "length": 10,
+   "width": 1.2
+  },
+  {
+   "a": "Store Room 2",
+   "b": "2 Corridor Centre",
+   "length": 10,
+   "width": 1.2
+  },
+  {
+   "a": "Stair A G",
+   "b": "Stair A 1",
+   "length": 12,
+   "width": 1.2,
+   "wheelchair": false,
+   "stretcher": false
+  },
+  {
+   "a": "Stair B G",
+   "b": "Stair B 1",
+   "length": 12,
+   "width": 1.2,
+   "wheelchair": false,
+   "stretcher": false
+  },
+  {
+   "a": "Lift E G",
+   "b": "Lift E 1",
+   "length": 4,
+   "width": 1.2
+  },
+  {
+   "a": "Stair A 1",
+   "b": "Stair A 2",
+   "length": 12,
+   "width": 1.2,
+   "wheelchair": false,
+   "stretcher": false
+  },
+  {
+   "a": "Stair B 1",
+   "b": "Stair B 2",
+   "length": 12,
+   "width": 1.2,
+   "wheelchair": false,
+   "stretcher": false
+  },
+  {
+   "a": "Lift E 1",
+   "b": "Lift E 2",
+   "length": 4,
+   "width": 1.2
+  }
+ ],
+ "patients": [
+  {
+   "code": "DEMO-P001",
+   "mobility": "ambulatory",
+   "criticality": 5,
+   "place": "Emergency"
+  },
+  {
+   "code": "DEMO-P002",
+   "mobility": "ambulatory",
+   "criticality": 3,
+   "place": "Emergency"
+  },
+  {
+   "code": "DEMO-P003",
+   "mobility": "ambulatory",
+   "criticality": 5,
+   "place": "Emergency"
+  },
+  {
+   "code": "DEMO-P004",
+   "mobility": "wheelchair",
+   "criticality": 3,
+   "place": "Emergency"
+  },
+  {
+   "code": "DEMO-P005",
+   "mobility": "ambulatory",
+   "criticality": 2,
+   "place": "OPD"
+  },
+  {
+   "code": "DEMO-P006",
+   "mobility": "ambulatory",
+   "criticality": 1,
+   "place": "OPD"
+  },
+  {
+   "code": "DEMO-P007",
+   "mobility": "ambulatory",
+   "criticality": 2,
+   "place": "OPD"
+  },
+  {
+   "code": "DEMO-P008",
+   "mobility": "wheelchair",
+   "criticality": 1,
+   "place": "OPD"
+  },
+  {
+   "code": "DEMO-P009",
+   "mobility": "ambulatory",
+   "criticality": 1,
+   "place": "OPD"
+  },
+  {
+   "code": "DEMO-P010",
+   "mobility": "ambulatory",
+   "criticality": 2,
+   "place": "Ward 1A"
+  },
+  {
+   "code": "DEMO-P011",
+   "mobility": "stretcher",
+   "criticality": 1,
+   "place": "Ward 1A"
+  },
+  {
+   "code": "DEMO-P012",
+   "mobility": "wheelchair",
+   "criticality": 3,
+   "place": "Ward 1A"
+  },
+  {
+   "code": "DEMO-P013",
+   "mobility": "ambulatory",
+   "criticality": 2,
+   "place": "Ward 1A"
+  },
+  {
+   "code": "DEMO-P014",
+   "mobility": "wheelchair",
+   "criticality": 3,
+   "place": "Ward 1A"
+  },
+  {
+   "code": "DEMO-P015",
+   "mobility": "ambulatory",
+   "criticality": 1,
+   "place": "Ward 1A"
+  },
+  {
+   "code": "DEMO-P016",
+   "mobility": "ambulatory",
+   "criticality": 3,
+   "place": "Ward 1B"
+  },
+  {
+   "code": "DEMO-P017",
+   "mobility": "ambulatory",
+   "criticality": 1,
+   "place": "Ward 1B"
+  },
+  {
+   "code": "DEMO-P018",
+   "mobility": "wheelchair",
+   "criticality": 3,
+   "place": "Ward 1B"
+  },
+  {
+   "code": "DEMO-P019",
+   "mobility": "wheelchair",
+   "criticality": 3,
+   "place": "Ward 1B"
+  },
+  {
+   "code": "DEMO-P020",
+   "mobility": "ambulatory",
+   "criticality": 1,
+   "place": "Ward 1B"
+  },
+  {
+   "code": "DEMO-P021",
+   "mobility": "ambulatory",
+   "criticality": 3,
+   "place": "Ward 1B"
+  },
+  {
+   "code": "DEMO-P022",
+   "mobility": "stretcher",
+   "criticality": 4,
+   "place": "ICU"
+  },
+  {
+   "code": "DEMO-P023",
+   "mobility": "ventilator",
+   "criticality": 4,
+   "place": "ICU"
+  },
+  {
+   "code": "DEMO-P024",
+   "mobility": "stretcher",
+   "criticality": 4,
+   "place": "ICU"
+  },
+  {
+   "code": "DEMO-P025",
+   "mobility": "stretcher",
+   "criticality": 5,
+   "place": "ICU"
+  },
+  {
+   "code": "DEMO-P026",
+   "mobility": "ambulatory",
+   "criticality": 2,
+   "place": "Ward 2A"
+  },
+  {
+   "code": "DEMO-P027",
+   "mobility": "wheelchair",
+   "criticality": 3,
+   "place": "Ward 2A"
+  },
+  {
+   "code": "DEMO-P028",
+   "mobility": "ambulatory",
+   "criticality": 3,
+   "place": "Ward 2A"
+  },
+  {
+   "code": "DEMO-P029",
+   "mobility": "ambulatory",
+   "criticality": 4,
+   "place": "Ward 2A"
+  },
+  {
+   "code": "DEMO-P030",
+   "mobility": "wheelchair",
+   "criticality": 1,
+   "place": "Ward 2A"
+  },
+  {
+   "code": "DEMO-P031",
+   "mobility": "ambulatory",
+   "criticality": 1,
+   "place": "Ward 2A"
+  },
+  {
+   "code": "DEMO-P032",
+   "mobility": "ambulatory",
+   "criticality": 4,
+   "place": "Ward 2B"
+  },
+  {
+   "code": "DEMO-P033",
+   "mobility": "wheelchair",
+   "criticality": 2,
+   "place": "Ward 2B"
+  },
+  {
+   "code": "DEMO-P034",
+   "mobility": "wheelchair",
+   "criticality": 2,
+   "place": "Ward 2B"
+  },
+  {
+   "code": "DEMO-P035",
+   "mobility": "ambulatory",
+   "criticality": 2,
+   "place": "Ward 2B"
+  },
+  {
+   "code": "DEMO-P036",
+   "mobility": "stretcher",
+   "criticality": 2,
+   "place": "Ward 2B"
+  },
+  {
+   "code": "DEMO-P037",
+   "mobility": "stretcher",
+   "criticality": 4,
+   "place": "Recovery"
+  },
+  {
+   "code": "DEMO-P038",
+   "mobility": "stretcher",
+   "criticality": 4,
+   "place": "Recovery"
+  },
+  {
+   "code": "DEMO-P039",
+   "mobility": "wheelchair",
+   "criticality": 3,
+   "place": "Recovery"
+  },
+  {
+   "code": "DEMO-P040",
+   "mobility": "ventilator",
+   "criticality": 5,
+   "place": "Operating Theatre"
+  }
+ ],
+ "staff": [
+  {
+   "code": "DEMO-S001",
+   "role": "doctor",
+   "place": "Emergency"
+  },
+  {
+   "code": "DEMO-S002",
+   "role": "nurse",
+   "place": "Emergency"
+  },
+  {
+   "code": "DEMO-S003",
+   "role": "nurse",
+   "place": "Emergency"
+  },
+  {
+   "code": "DEMO-S004",
+   "role": "porter",
+   "place": "G Corridor Centre"
+  },
+  {
+   "code": "DEMO-S005",
+   "role": "nurse",
+   "place": "Nurses Station 1"
+  },
+  {
+   "code": "DEMO-S006",
+   "role": "nurse",
+   "place": "Nurses Station 1"
+  },
+  {
+   "code": "DEMO-S007",
+   "role": "nurse",
+   "place": "Nurses Station 1"
+  },
+  {
+   "code": "DEMO-S008",
+   "role": "doctor",
+   "place": "ICU"
+  },
+  {
+   "code": "DEMO-S009",
+   "role": "porter",
+   "place": "1 Corridor East"
+  },
+  {
+   "code": "DEMO-S010",
+   "role": "nurse",
+   "place": "Recovery"
+  },
+  {
+   "code": "DEMO-S011",
+   "role": "nurse",
+   "place": "Recovery"
+  },
+  {
+   "code": "DEMO-S012",
+   "role": "doctor",
+   "place": "Operating Theatre"
+  },
+  {
+   "code": "DEMO-S013",
+   "role": "nurse",
+   "place": "Operating Theatre"
+  },
+  {
+   "code": "DEMO-S014",
+   "role": "porter",
+   "place": "2 Corridor West"
+  },
+  {
+   "code": "DEMO-S015",
+   "role": "porter",
+   "place": "2 Corridor West"
+  }
+ ],
+ "sensors": [
+  {
+   "id": "SD-01",
+   "kind": "smoke",
+   "place": "G Corridor West"
+  },
+  {
+   "id": "SD-02",
+   "kind": "smoke",
+   "place": "G Corridor Centre"
+  },
+  {
+   "id": "SD-03",
+   "kind": "smoke",
+   "place": "G Corridor East"
+  },
+  {
+   "id": "SD-04",
+   "kind": "smoke",
+   "place": "Emergency"
+  },
+  {
+   "id": "SD-05",
+   "kind": "smoke",
+   "place": "OPD"
+  },
+  {
+   "id": "SD-06",
+   "kind": "smoke",
+   "place": "Pharmacy"
+  },
+  {
+   "id": "SD-07",
+   "kind": "smoke",
+   "place": "Radiology"
+  },
+  {
+   "id": "SD-08",
+   "kind": "smoke",
+   "place": "Kitchen"
+  },
+  {
+   "id": "SD-09",
+   "kind": "smoke",
+   "place": "1 Corridor West"
+  },
+  {
+   "id": "SD-10",
+   "kind": "smoke",
+   "place": "1 Corridor Centre"
+  },
+  {
+   "id": "SD-11",
+   "kind": "smoke",
+   "place": "1 Corridor East"
+  },
+  {
+   "id": "SD-12",
+   "kind": "smoke",
+   "place": "Ward 1A"
+  },
+  {
+   "id": "SD-13",
+   "kind": "smoke",
+   "place": "Ward 1B"
+  },
+  {
+   "id": "SD-14",
+   "kind": "smoke",
+   "place": "ICU"
+  },
+  {
+   "id": "SD-15",
+   "kind": "smoke",
+   "place": "Nurses Station 1"
+  },
+  {
+   "id": "SD-16",
+   "kind": "smoke",
+   "place": "Store Room 1"
+  },
+  {
+   "id": "SD-17",
+   "kind": "smoke",
+   "place": "2 Corridor West"
+  },
+  {
+   "id": "SD-18",
+   "kind": "smoke",
+   "place": "2 Corridor Centre"
+  },
+  {
+   "id": "SD-19",
+   "kind": "smoke",
+   "place": "2 Corridor East"
+  },
+  {
+   "id": "SD-20",
+   "kind": "smoke",
+   "place": "Ward 2A"
+  },
+  {
+   "id": "SD-21",
+   "kind": "smoke",
+   "place": "Ward 2B"
+  },
+  {
+   "id": "SD-22",
+   "kind": "smoke",
+   "place": "Operating Theatre"
+  },
+  {
+   "id": "SD-23",
+   "kind": "smoke",
+   "place": "Recovery"
+  },
+  {
+   "id": "SD-24",
+   "kind": "smoke",
+   "place": "Store Room 2"
+  },
+  {
+   "id": "HD-01",
+   "kind": "heat",
+   "place": "Kitchen"
+  },
+  {
+   "id": "HD-02",
+   "kind": "heat",
+   "place": "Store Room 1"
+  },
+  {
+   "id": "GD-01",
+   "kind": "gas",
+   "place": "Pharmacy"
+  },
+  {
+   "id": "GD-02",
+   "kind": "gas",
+   "place": "G Corridor East"
+  }
+ ],
+ "cameras": [
+  {
+   "id": "CAM-ED",
+   "place": "Emergency",
+   "count": 6
+  },
+  {
+   "id": "CAM-OPD",
+   "place": "OPD",
+   "count": 10
+  },
+  {
+   "id": "CAM-LOBBY",
+   "place": "G Corridor Centre",
+   "count": 4
+  },
+  {
+   "id": "CAM-1A",
+   "place": "Ward 1A",
+   "count": 3
+  },
+  {
+   "id": "CAM-2B",
+   "place": "Ward 2B",
+   "count": 2
+  }
+ ],
+ "scenarios": [
+  {
+   "name": "Kitchen fire, ground floor",
+   "alarm": "sensors",
+   "note": "Fire starts in the Kitchen. Sensors must detect it and the commander confirms.",
+   "hazards": [
+    {
+     "type": "fire",
+     "origin": "Kitchen",
+     "severity": 4,
+     "spreadRate": 0.03
+    },
+    {
+     "type": "smoke",
+     "origin": "Kitchen",
+     "severity": 3,
+     "spreadRate": 0.1
+    }
+   ]
+  },
+  {
+   "name": "Fire beside the ICU, floor 1",
+   "alarm": "sensors",
+   "note": "Fast fire in Store Room 1, next to the ICU and the evacuation lift lobby.",
+   "hazards": [
+    {
+     "type": "fire",
+     "origin": "Store Room 1",
+     "severity": 5,
+     "spreadRate": 0.05
+    },
+    {
+     "type": "smoke",
+     "origin": "Store Room 1",
+     "severity": 4,
+     "spreadRate": 0.1
+    }
+   ]
+  },
+  {
+   "name": "Smoke spreading on floor 2",
+   "alarm": "sensors",
+   "note": "Heavy smoke from Store Room 2 blocks places as it spreads.",
+   "hazards": [
+    {
+     "type": "smoke",
+     "origin": "Store Room 2",
+     "severity": 4,
+     "spreadRate": 0.1
+    }
+   ]
+  },
+  {
+   "name": "Chemical spill in the Pharmacy",
+   "alarm": "sensors",
+   "note": "Hazardous material spreads slowly; gas sensors detect it.",
+   "hazards": [
+    {
+     "type": "hazmat",
+     "origin": "Pharmacy",
+     "severity": 3,
+     "spreadRate": 0.02
+    }
+   ]
+  },
+  {
+   "name": "Evacuation drill (no hazard)",
+   "alarm": "start",
+   "note": "Alarm sounds at the start; everyone leaves by the best usable route.",
+   "hazards": []
+  }
+ ]
+}
