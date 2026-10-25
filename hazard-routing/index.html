@@ -1,0 +1,578 @@
+<title>Hazard-Aware Evacuation Routing</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Prototype of dynamic hazard-aware evacuation routing for a made-up hospital: live hazard estimate from noisy sensors, time-dependent congestion and dose aware routes, exit signs, rescue teams, method comparison and drill check.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js" } }</script>
+<style>
+/* Layout: a signage-green header band, a row of tabs, then each page.
+   The Live run page is controls | building view | situation panel.
+   One light look on purpose (the user asked for light, minimal colours),
+   so every colour is set explicitly below. */
+:root {
+  color-scheme: light;
+  --bg: #F5F7F6;          /* page ground, a grey leaning to the sign green */
+  --card: #FFFFFF;
+  --line: #DDE4E0;
+  --ink: #14231C;         /* headings and numbers */
+  --text: #34433C;
+  --muted: #63726B;
+  --sign: #0B7A4B;        /* exit-sign green: the one accent */
+  --sign-dark: #06402A;
+  --sign-tint: #E6F2EC;
+  --hazard: #C2410C;      /* fire and smoke, alerts */
+  --hazard-tint: #FCEBE2;
+  --warn: #A16207;
+  --warn-tint: #FBF2D9;
+  --crit: #B91C1C;
+  --m-nearest: #6250D6;   /* method colours (validated for colour-blind separation) */
+  --m-safe: #EDA100;
+  --m-congestion: #2A78D6;
+  --m-proposed: #0B7A4B;
+  --display: "Barlow Semi Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --r: 10px;
+}
+html, body { min-height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--text); font-family: var(--body); font-size: 14px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--card); }
+* { box-sizing: border-box; }
+h1, h2, h3 { color: var(--ink); margin: 0; line-height: 1.2; text-wrap: balance; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 22px; letter-spacing: 0.01em; }
+h2 { font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: 0.01em; }
+h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+p { margin: 0; }
+a { color: var(--sign); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--sign); outline-offset: 2px; }
+.num, td.n, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+/* Header band */
+.top { background: var(--sign-dark); color: #FFFFFF; }
+.top .wrap { display: flex; align-items: center; gap: 14px; padding-block: 10px; flex-wrap: wrap; }
+.mark { width: 38px; height: 38px; border-radius: 6px; background: var(--sign); display: grid; place-items: center; flex: none; }
+.brand { min-width: 0; }
+.brand h1 { color: #FFFFFF; font-size: 21px; }
+.brand p { color: #BFDCCC; font-size: 12.5px; }
+.status { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.top .chip { background: rgba(255,255,255,0.1); color: #FFFFFF; }
+.top .chip.alarm { background: var(--hazard); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.tabs { background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 4; }
+.tabs .wrap { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+.tabs button { border: 0; background: none; padding: 11px 12px 9px; font-weight: 500; color: var(--muted); border-bottom: 2.5px solid transparent; white-space: nowrap; cursor: pointer; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--sign-dark); border-bottom-color: var(--sign); }
+main.wrap { padding-block: 18px 28px; }
+.page { display: grid; gap: 16px; }
+.page[hidden] { display: none; }
+.page-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; }
+.page-head p { max-width: 72ch; color: var(--muted); }
+.gap-tag { font-size: 11.5px; font-weight: 600; color: var(--sign-dark); background: var(--sign-tint); border-radius: 4px; padding: 2px 7px; letter-spacing: 0.02em; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; min-width: 0; }
+.card > h3 { margin-bottom: 10px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; align-items: start; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.note { background: var(--warn-tint); border-radius: 8px; padding: 10px 12px; color: #5C3D06; font-size: 13px; }
+.note.info { background: var(--sign-tint); color: var(--sign-dark); }
+
+/* Controls */
+label.f { display: grid; gap: 4px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+select, input[type="number"], input[type="text"], textarea { border: 1px solid var(--line); border-radius: 7px; background: var(--card); padding: 6px 8px; min-width: 0; width: 100%; color: var(--ink); }
+textarea { font-family: var(--mono); font-size: 12px; }
+.btn { border: 1px solid var(--line); background: var(--card); border-radius: 7px; padding: 6px 12px; font-weight: 500; cursor: pointer; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--sign); }
+.btn.primary { background: var(--sign); border-color: var(--sign); color: #FFFFFF; }
+.btn.primary:hover { background: var(--sign-dark); }
+.btn.danger { color: var(--hazard); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: var(--card); padding: 5px 10px; cursor: pointer; font-weight: 500; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--sign-tint); color: var(--sign-dark); }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggles label { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px 2px 6px; cursor: pointer; }
+.toggles input { accent-color: var(--sign); margin: 0; }
+.checks { display: grid; gap: 6px; }
+.checks label { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.checks input { accent-color: var(--sign); }
+
+/* Live run */
+.live { grid-template-columns: 250px minmax(0, 1fr) 300px; align-items: start; }
+.controls { display: grid; gap: 10px; }
+.controls .row .btn { flex: 1; justify-content: center; }
+.stage { padding: 0; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.stage-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.view { position: relative; height: min(76vh, 760px); min-height: 420px; background: var(--bg); }
+.view > .layer { position: absolute; inset: 0; }
+.view canvas { display: block; }
+.banner { position: absolute; left: 12px; right: 12px; top: 12px; z-index: 2; background: var(--hazard); color: #FFFFFF; border-radius: 8px; padding: 8px 12px; font-weight: 500; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.banner .btn { padding: 3px 10px; }
+.legend-bar { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.legend-bar span { display: inline-flex; gap: 5px; align-items: center; }
+.sw { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.sw.sq { border-radius: 2px; }
+.sw.bed { border-radius: 2px; width: 7px; height: 13px; }
+.sw.line { width: 16px; height: 3px; border-radius: 2px; }
+.sw.dash { width: 16px; height: 0; border-top: 2px dashed var(--hazard); border-radius: 0; }
+.place-tip { position: fixed; z-index: 20; pointer-events: none; background: var(--ink); color: #FFFFFF; border-radius: 7px; padding: 7px 10px; font-size: 12px; max-width: 260px; }
+.place-tip b { font-weight: 600; }
+.panel { display: grid; gap: 12px; }
+.clock { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.clock .t { font-family: var(--mono); font-size: 28px; color: var(--ink); font-weight: 500; }
+.bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; display: flex; }
+.bar i { display: block; height: 100%; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; font-family: var(--mono); color: var(--ink); }
+.alerts { display: grid; gap: 6px; max-height: 240px; overflow-y: auto; }
+.alert { border: 1px solid var(--line); border-left: 3px solid var(--hazard); border-radius: 7px; padding: 6px 8px; font-size: 12.5px; display: grid; gap: 4px; }
+.alert.confirmed { border-left-color: var(--sign); }
+.alert.dismissed { border-left-color: var(--line); color: var(--muted); }
+.events { max-height: 220px; overflow-y: auto; font-size: 12px; display: grid; gap: 3px; }
+.events div { display: grid; grid-template-columns: 52px 1fr; gap: 6px; }
+.events .k-alarm, .events .k-harm { color: var(--hazard); }
+.events .k-rescue { color: var(--sign-dark); }
+
+/* Feedback loop strip (the four layers, repeated every delta t) */
+.loop { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; position: relative; padding-bottom: 18px; }
+.loop span { font-size: 11px; font-weight: 600; text-align: center; padding: 6px 2px; border-radius: 6px; background: var(--bg); color: var(--muted); letter-spacing: 0.02em; }
+.loop.run span { animation: layer 1.6s ease-out both; }
+.loop.run span:nth-child(2) { animation-delay: 0.25s; }
+.loop.run span:nth-child(3) { animation-delay: 0.5s; }
+.loop.run span:nth-child(4) { animation-delay: 0.75s; }
+@keyframes layer { 0% { background: var(--bg); color: var(--muted); } 20% { background: var(--sign); color: #FFFFFF; } 100% { background: var(--sign-tint); color: var(--sign-dark); } }
+.loop::after { content: attr(data-every); position: absolute; left: 0; right: 0; bottom: 0; font-size: 11px; color: var(--muted); text-align: center; border-top: 1.5px solid var(--line); padding-top: 2px; }
+@media (prefers-reduced-motion: reduce) { .loop.run span { animation: none; background: var(--sign-tint); color: var(--sign-dark); } }
+
+/* Signs */
+.sign-floors { display: grid; gap: 16px; }
+.signs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.sign { border-radius: 6px; background: var(--sign); color: #FFFFFF; padding: 8px 10px; display: grid; grid-template-columns: 34px 1fr; gap: 8px; align-items: center; min-height: 58px; }
+.sign svg { width: 34px; height: 34px; }
+.sign .where { font-size: 11px; opacity: 0.85; }
+.sign .to { font-family: var(--display); font-weight: 700; font-size: 15px; line-height: 1.1; }
+.sign.nogo { background: var(--hazard); }
+.sign.failed { background: #C9D1CD; color: #34433C; }
+.sign.changed { animation: flip 0.9s ease-out; box-shadow: 0 0 0 3px var(--sign-tint); }
+@keyframes flip { 0% { transform: rotateX(70deg); opacity: 0.4; } 100% { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sign.changed { animation: none; } }
+
+/* Tables */
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+td.n, th.n { text-align: right; }
+tr.best td { background: var(--sign-tint); }
+.pill { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.pill.ok { background: var(--sign-tint); color: var(--sign-dark); }
+.pill.bad { background: var(--hazard-tint); color: var(--hazard); }
+.pill.warn { background: var(--warn-tint); color: var(--warn); }
+.pill.mute { background: var(--bg); color: var(--muted); }
+.k-sourced { background: var(--sign-tint); color: var(--sign-dark); }
+.k-derived { background: #E8F0FA; color: #1F4E8C; }
+.k-assumed { background: var(--warn-tint); color: var(--warn); }
+.k-policy { background: var(--bg); color: var(--muted); }
+.big { font-family: var(--mono); font-size: 24px; color: var(--ink); }
+.stat { display: grid; gap: 2px; }
+.stat .lab { font-size: 12px; color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+.method-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--sign); width: 0; transition: width 0.2s; }
+.team { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.team .route { font-size: 12px; color: var(--muted); }
+details summary { cursor: pointer; font-weight: 500; }
+.layer-list { display: grid; gap: 10px; }
+.layer-list > div { display: grid; grid-template-columns: 120px 1fr; gap: 10px; }
+.layer-list b { font-family: var(--display); font-size: 16px; color: var(--sign-dark); }
+
+/* Charts */
+svg.chart { display: block; overflow: visible; }
+svg.chart .grid { stroke: var(--line); stroke-width: 1; }
+svg.chart .axis { stroke: #AEB9B3; stroke-width: 1; }
+svg.chart .tick { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+svg.chart .label { fill: var(--muted); font-size: 11.5px; }
+svg.chart .value { fill: var(--text); font-size: 10.5px; font-family: var(--mono); }
+svg.chart .whisker { stroke: var(--ink); stroke-width: 1.2; }
+svg.chart .cross { stroke: var(--muted); stroke-dasharray: 3 3; }
+svg.chart .diag { stroke: #AEB9B3; stroke-dasharray: 4 4; }
+svg.chart .cell { fill: var(--ink); font-size: 11px; font-family: var(--mono); }
+svg.chart .cell.dark { fill: #FFFFFF; }
+svg.chart .best { stroke: var(--ink); stroke-width: 2; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend i.band { height: 10px; opacity: 0.25; }
+.chart-tip { position: fixed; z-index: 30; pointer-events: none; background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(20,35,28,0.12); color: var(--text); }
+.chart-tip .tip-h { font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+.chart-tip i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+.empty { color: var(--muted); padding: 18px 0; text-align: center; }
+
+footer.wrap { padding-block: 14px 24px; color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--line); background: var(--card); }
+
+@media (max-width: 1180px) {
+  .live { grid-template-columns: minmax(0, 1fr); }
+  .live .stage { order: -1; }
+  .controls { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .view { height: 64vh; }
+}
+@media (max-width: 560px) {
+  .status { margin-left: 0; }
+  .view { height: 70vh; min-height: 360px; }
+  .layer-list > div { grid-template-columns: 1fr; gap: 2px; }
+  .loop span { font-size: 10px; }
+}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="mark" aria-hidden="true">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="14" y="3" width="9" height="20" rx="1" stroke="#FFFFFF" stroke-width="2"/><path d="M3 13h9m-3.5-4 4 4-4 4" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="brand">
+      <h1>Hazard-Aware Evacuation Routing</h1>
+      <p>Prototype for the seminar &middot; made-up hospital, made-up people &middot; adaptive path planning under fire and smoke</p>
+    </div>
+    <div class="status" aria-live="polite">
+      <span class="chip num" id="topClock">t = 0 s</span>
+      <span class="chip" id="topAlarm"><span class="dot"></span>No alarm</span>
+    </div>
+  </div>
+</header>
+<nav class="tabs" aria-label="Pages">
+  <div class="wrap" role="tablist">
+    <button role="tab" data-page="live" aria-selected="true">Live run</button>
+    <button role="tab" data-page="signs" aria-selected="false">Exit signs</button>
+    <button role="tab" data-page="sensors" aria-selected="false">Sensors and estimate</button>
+    <button role="tab" data-page="rescue" aria-selected="false">Rescue teams</button>
+    <button role="tab" data-page="compare" aria-selected="false">Compare methods</button>
+    <button role="tab" data-page="drill" aria-selected="false">Drill check</button>
+    <button role="tab" data-page="data" aria-selected="false">Building and data</button>
+    <button role="tab" data-page="params" aria-selected="false">Parameters</button>
+    <button role="tab" data-page="about" aria-selected="false">How it works</button>
+  </div>
+</nav>
+
+<main class="wrap">
+  <p class="note" id="loadError" hidden></p>
+
+  <!-- LIVE RUN -->
+  <section class="page live" data-page="live">
+    <aside class="card controls" aria-label="Run settings">
+      <label class="f">Scenario<select id="scenario"></select></label>
+      <p class="small muted" id="scenarioNote"></p>
+      <label class="f">Routing method<select id="method"></select></label>
+      <label class="f">What people and sensors know<select id="info">
+        <option value="realistic">Realistic: faults, partial compliance</option>
+        <option value="perfect">Perfect information (upper bound)</option>
+      </select></label>
+      <label class="f">Hazard picture used for routing<select id="hazardInfo"></select></label>
+      <label class="f">Patients who cannot walk<select id="strategy">
+        <option value="horizontal">Move to a safe compartment first (refuge)</option>
+        <option value="full">Take everyone out of the building</option>
+      </select></label>
+      <label class="f">Sensor alerts<select id="confirm">
+        <option value="auto">Commander confirms after 20 s (automatic)</option>
+        <option value="manual">I confirm or dismiss each alert</option>
+      </select></label>
+      <label class="f">Random seed (people, faults, real spread)<input type="number" id="seed" value="1" min="1" max="99999"></label>
+      <div class="row">
+        <button class="btn primary" id="play">Start</button>
+        <button class="btn" id="stepBtn">+10 s</button>
+        <button class="btn" id="reset">Restart</button>
+      </div>
+      <label class="f">Speed<select id="speed">
+        <option value="1">Real time</option>
+        <option value="5" selected>5 times</option>
+        <option value="20">20 times</option>
+        <option value="60">60 times</option>
+      </select></label>
+      <details>
+        <summary>Test a false alarm</summary>
+        <div class="checks" style="margin-top:8px">
+          <label class="f">Sensor<select id="faSensor"></select></label>
+          <button class="btn" id="faBtn">Make it fire now</button>
+          <p class="small muted">The commander can dismiss it; a dismissed sensor is left out of the estimate.</p>
+        </div>
+      </details>
+    </aside>
+
+    <div class="card stage">
+      <div class="stage-bar">
+        <div class="seg" role="group" aria-label="View">
+          <button id="v2d" aria-pressed="true">2D plan</button>
+          <button id="v3d" aria-pressed="false">3D</button>
+        </div>
+        <select id="floor" aria-label="Floor" style="width:auto"></select>
+        <div class="toggles" id="layers">
+          <label><input type="checkbox" data-layer="hazard" checked>Real smoke</label>
+          <label><input type="checkbox" data-layer="predicted" checked>Predicted (2 min)</label>
+          <label><input type="checkbox" data-layer="routes" checked>Routes</label>
+          <label><input type="checkbox" data-layer="signs" checked>Signs</label>
+          <label><input type="checkbox" data-layer="sensors" checked>Sensors</label>
+          <label><input type="checkbox" data-layer="density">Crowding</label>
+        </div>
+      </div>
+      <div class="view" id="view">
+        <div class="layer" id="view2d"></div>
+        <div class="layer" id="view3d" hidden></div>
+        <div class="banner" id="banner" hidden></div>
+      </div>
+      <div class="legend-bar">
+        <span><i class="sw" style="background:#2A78D6"></i>Walking patient</span>
+        <span><i class="sw sq" style="background:#6250D6"></i>Wheelchair</span>
+        <span><i class="sw bed" style="background:#B45309"></i>Bed</span>
+        <span><i class="sw" style="background:#14231C"></i>Staff</span>
+        <span><i class="sw" style="background:#7A8781"></i>Visitor</span>
+        <span><i class="sw sq" style="background:#C2410C"></i>Rescue team</span>
+        <span><i class="sw line" style="background:#0B7A4B"></i>Planned route</span>
+        <span><i class="sw dash"></i>Smoke expected within 2 min</span>
+        <span><i class="sw sq" style="background:#5E6B76;opacity:.55"></i>Smoke now</span>
+      </div>
+    </div>
+
+    <aside class="panel" aria-label="Situation">
+      <div class="card">
+        <div class="loop" id="loop" data-every="repeats every 10 s">
+          <span>Sensing</span><span>Situation</span><span>Decision</span><span>Guidance</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="clock"><span class="t" id="clock">0:00</span><span class="small muted" id="alarmText">No alarm yet</span></div>
+        <div class="bar" style="margin:10px 0 4px" aria-hidden="true"><i id="barOut" style="background:var(--sign)"></i><i id="barRef" style="background:#7FBF9F"></i><i id="barHarm" style="background:var(--hazard)"></i></div>
+        <p class="small muted" id="barText"></p>
+        <dl class="kv" style="margin-top:10px" id="kv"></dl>
+      </div>
+      <div class="card">
+        <h3>Alerts</h3>
+        <div class="alerts" id="alerts"><p class="small muted">No sensor has detected anything.</p></div>
+      </div>
+      <div class="card">
+        <h3>What happened</h3>
+        <div class="events" id="events"></div>
+      </div>
+    </aside>
+  </section>
+
+  <!-- EXIT SIGNS -->
+  <section class="page" data-page="signs" hidden>
+    <div class="page-head">
+      <div><h2>Exit signs</h2><p>What each dynamic sign shows right now in the live run. Signs are set by one search backward from a virtual exit node, looking 60 s ahead for smoke. A red sign means no safe way from that spot. People read a sign only if they can see it (visibility of at least 5 m).</p></div>
+      <span class="gap-tag">Guidance layer</span>
+    </div>
+    <div class="stats card" id="signStats"></div>
+    <div class="sign-floors" id="signFloors"></div>
+  </section>
+
+  <!-- SENSORS AND ESTIMATE -->
+  <section class="page" data-page="sensors" hidden>
+    <div class="page-head">
+      <div><h2>Sensors and live estimate</h2><p>The routing never sees the real fire. It sees noisy readings from sensors that may be dead, stuck, reading too high or losing readings, plus phone reports from people who see smoke. From these it fits where the fire started and how fast smoke spreads, and predicts when smoke reaches every place, including places with no sensor.</p></div>
+      <span class="gap-tag">Gaps 4 and 5</span>
+    </div>
+    <div class="grid3" id="estStats"></div>
+    <div class="grid2">
+      <div class="card"><h3>Arrival-time error of the prediction</h3><div id="chartMae"></div><p class="small muted">Mean absolute difference between predicted and real smoke arrival, over the places smoke really reaches.</p></div>
+      <div class="card"><h3>Predicted against real arrival (now)</h3><div id="chartScatter"></div><p class="small muted">Points under the dashed line mean the prediction is early (on the safe side).</p></div>
+    </div>
+    <div class="card">
+      <h3>Replay recorded readings</h3>
+      <p class="small muted" style="margin-bottom:10px">Load a file of readings (columns sensor, t, value) and run the same detection and estimate on it. The example is a made-up recording of the kitchen fire produced by this simulator (real spread speed 0.099 m/s).</p>
+      <div class="row">
+        <button class="btn" id="replayExample">Use the example recording</button>
+        <label class="btn" for="replayFile">Load a CSV file</label>
+        <input type="file" id="replayFile" accept=".csv,text/csv" hidden>
+        <label class="f" style="width:170px">Design spread speed (m/s)<input type="number" id="replayRate" value="0.08" step="0.01" min="0.01" max="1"></label>
+      </div>
+      <div id="replayOut" style="margin-top:12px"></div>
+    </div>
+    <div class="card">
+      <h3>Sensors in this run</h3>
+      <div class="row" style="margin-bottom:8px">
+        <select id="sensorFilter" style="width:auto"><option value="all">All sensors</option><option value="detected">Detected the hazard</option><option value="problem">Health check problem</option><option value="fault">Has a fault (hidden from the system)</option></select>
+      </div>
+      <div class="tbl" style="max-height:520px;overflow-y:auto"><table id="sensorTable"></table></div>
+    </div>
+  </section>
+
+  <!-- RESCUE -->
+  <section class="page" data-page="rescue" hidden>
+    <div class="page-head">
+      <div><h2>Rescue teams</h2><p>Fire brigade teams arrive after the alarm and go to people who cannot get out: people sheltering with no safe route, people overcome by smoke, and patients still waiting for staff. Their routes use the same live hazard picture but allow more smoke (breathing apparatus) and count the crowd coming the other way.</p></div>
+      <span class="gap-tag">Paper [2] idea</span>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Teams</h3><div id="teams" class="checks"></div></div>
+      <div class="card"><h3>People who need rescue</h3><div class="tbl"><table id="needRescue"></table></div></div>
+    </div>
+  </section>
+
+  <!-- COMPARE -->
+  <section class="page" data-page="compare" hidden>
+    <div class="page-head">
+      <div><h2>Compare methods</h2><p>Repeated runs of one scenario. Each run draws new walking speeds, delays, phone owners, sensor faults and a new real spread speed, with the same seeds for every method so the comparison is fair. Results are means with standard deviations.</p></div>
+      <span class="gap-tag">Step 7: evaluation</span>
+    </div>
+    <div class="card">
+      <div class="grid3">
+        <label class="f">Scenario<select id="cmpScenario"></select></label>
+        <label class="f">Runs per method<select id="cmpRuns"><option>3</option><option selected>5</option><option>10</option><option>20</option></select></label>
+        <div class="checks"><span class="small muted">Methods</span><div id="cmpMethods" class="checks"></div></div>
+        <div class="checks"><span class="small muted">Information</span>
+          <label><input type="checkbox" data-cond="live" checked>Realistic, live estimate</label>
+          <label><input type="checkbox" data-cond="offline">Realistic, fire model run before</label>
+          <label><input type="checkbox" data-cond="perfect" checked>Perfect information</label>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" id="cmpRun">Run comparison</button>
+        <div class="progress" style="flex:1;min-width:120px"><i id="cmpProg"></i></div>
+        <span class="small muted num" id="cmpProgText"></span>
+      </div>
+    </div>
+    <div id="cmpOut"></div>
+  </section>
+
+  <!-- DRILL -->
+  <section class="page" data-page="drill" hidden>
+    <div class="page-head">
+      <div><h2>Drill check</h2><p>Compare the simulator with a record of a real drill: when each person left and by which exit. Then calibrate walking speed and delay on one drill and check the result on another drill it has not seen.</p></div>
+      <span class="gap-tag">Gap 2: validation</span>
+    </div>
+    <p class="note">The two example drill records are not real drills. They were made by this simulator with hidden settings (people 10% slower, delays 25% longer, a different seed, and timing noise). They only show that the comparison and calibration work. Load a real drill record to learn how good the model is.</p>
+    <div class="card">
+      <div class="grid3">
+        <div class="checks"><span class="small muted">Drill record</span>
+          <div class="row"><button class="btn" id="drillA">Example drill A (full)</button><button class="btn" id="drillB">Example drill B (main entrance closed)</button></div>
+          <div class="row"><label class="btn" for="drillFile">Load a CSV file</label><input type="file" id="drillFile" accept=".csv,text/csv" hidden><span class="small muted" id="drillName">No record loaded</span></div>
+        </div>
+        <label class="f">Drill scenario in the simulator<select id="drillScenario"></select></label>
+        <label class="f">Runs<select id="drillRuns"><option>3</option><option selected>5</option><option>10</option></select></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" id="drillRun">Compare</button>
+        <button class="btn" id="calRun">Calibrate speed and delay</button>
+        <div class="progress" style="flex:1;min-width:120px"><i id="drillProg"></i></div>
+      </div>
+    </div>
+    <div id="drillOut"></div>
+    <div id="calOut"></div>
+  </section>
+
+  <!-- DATA -->
+  <section class="page" data-page="data" hidden>
+    <div class="page-head">
+      <div><h2>Building and data</h2><p>The building graph: places hold area and capacity, paths hold length and effective width. Load your own building file, camera people counts, or add a fire scenario.</p></div>
+      <span class="gap-tag">Step 1: model the building</span>
+    </div>
+    <div class="stats card" id="dataStats"></div>
+    <div class="grid2">
+      <div class="card checks">
+        <h3>Load files</h3>
+        <div class="row"><label class="btn" for="bldFile">Load a building file (JSON)</label><input type="file" id="bldFile" accept=".json,application/json" hidden><button class="btn" id="bldExample">Back to the example hospital</button></div>
+        <div class="row"><label class="btn" for="camFile">Load camera counts (CSV)</label><input type="file" id="camFile" accept=".csv,text/csv" hidden><span class="small muted" id="camText">Using the counts in the building file</span></div>
+        <p class="small muted">Camera counts: columns camera, count and an optional time; the latest count per camera is used as the number of visitors there.</p>
+        <p class="small" id="dataMsg" role="status"></p>
+      </div>
+      <div class="card checks">
+        <h3>Add a fire scenario</h3>
+        <label class="f">Name<input type="text" id="scName" value="My fire scenario" maxlength="120"></label>
+        <label class="f">Where the fire starts<select id="scOrigin"></select></label>
+        <div class="row">
+          <label class="f" style="flex:1">Smoke spread speed (m/s)<input type="number" id="scSmoke" value="0.1" step="0.01" min="0.01" max="5"></label>
+          <label class="f" style="flex:1">Fire spread speed (m/s)<input type="number" id="scFire" value="0.012" step="0.001" min="0.001" max="5"></label>
+        </div>
+        <label class="f">Alarm<select id="scAlarm"><option value="sensors">When a sensor alert is confirmed</option><option value="start">At the start</option></select></label>
+        <button class="btn primary" id="scAdd">Add scenario</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Building file</h3>
+      <p class="small muted" style="margin-bottom:8px">The file in use, with any scenarios you added. Copy it to keep it.</p>
+      <div class="row" style="margin-bottom:8px"><button class="btn" id="copyBld">Copy</button><span class="small muted" id="copyMsg"></span></div>
+      <textarea id="bldText" rows="8" readonly aria-label="Building file"></textarea>
+    </div>
+  </section>
+
+  <!-- PARAMETERS -->
+  <section class="page" data-page="params" hidden>
+    <div class="page-head">
+      <div><h2>Parameters</h2><p>Every number the simulator uses and where it comes from. Values marked assumed have no published source in this prototype and should be replaced with measured or design values. Changes apply when you press Apply.</p></div>
+      <div class="row"><button class="btn primary" id="pApply">Apply and restart</button><button class="btn" id="pReset">Back to defaults</button></div>
+    </div>
+    <div id="paramGroups" class="grid2"></div>
+    <div class="card"><h3>Sources</h3><div id="sourceList" class="checks small"></div></div>
+  </section>
+
+  <!-- ABOUT -->
+  <section class="page" data-page="about" hidden>
+    <div class="page-head"><div><h2>How it works</h2><p>The prototype follows the proposed approach in the seminar: four layers in a loop, the seven method steps, and one feature or more for each research gap found in the eight papers.</p></div></div>
+    <div class="card">
+      <h3>Research gaps and what the prototype does about them</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Gap in the papers</th><th>In this prototype</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td>1. Occupants treated as able walkers; no wheelchair or bed users, no staff help (only [1] uses two speed classes)</td><td>Walking patients, wheelchair and bed patients, staff and visitors with their own speeds and preparation times. Staff walk to patients, prepare them and escort them (two per bed, one per wheelchair). Beds and wheelchairs never use stairs; they use the evacuation lift or move to a refuge in the other fire compartment.</td><td>Live run, Parameters</td></tr>
+          <tr><td>2. Real-drill validation is rare ([2] only, with 1969 data)</td><td>Drill check compares the simulator with a drill record (curve, T50, T90, last out, per group and per exit), calibrates speed and delay on one drill and tests on a second one.</td><td>Drill check</td></tr>
+          <tr><td>3. Hazard and crowding seldom modelled together</td><td>One route cost: c(e,t) = d(e)/v(&rho;) + &alpha;&middot;exposure(e, t<sub>arrival</sub>), with v = k(1 &minus; 0.266&rho;) and a congestion forecast built from the routes already given (time slots of 5 s). Exposure is the FED expected on the path at the time you would be there.</td><td>Live run, Compare methods</td></tr>
+          <tr><td>4. Perfect information assumed (full compliance, a device for everyone, reliable sensors)</td><td>Only some people have phones; only some follow guidance; others head for the exit they know. Sensors can be dead, stuck, read too high or lose readings, and burn out in the fire. Signs can fail or be hidden by smoke. Messages can be lost or late. The commander can confirm or dismiss alerts.</td><td>Live run, Sensors, Compare methods</td></tr>
+          <tr><td>5. Fire data computed before routing; noisy or missing live readings not handled</td><td>A live estimate fits the fire origin and spread speed from debounced detections and phone reports, drops readings that disagree (faulty sensors, false alarms), and predicts arrival everywhere. It can be compared with a fire model run before the event, which does not learn that the real fire is faster or slower.</td><td>Sensors and estimate, Compare methods</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>The four layers (repeated every &Delta;t)</h3>
+        <div class="layer-list">
+          <div><b>Sensing</b><span>Smoke, heat and CO sensors read every 5 s with noise and faults; camera counts give visitors; the building graph.</span></div>
+          <div><b>Situation</b><span>Risk index and FED (ISO 13571); live prediction of smoke arrival; crowd density on each path.</span></div>
+          <div><b>Decision</b><span>Filter places above &theta; at the time you would reach them; time-dependent, congestion and dose aware routes; least-risk fallback or shelter; the commander confirms alerts.</span></div>
+          <div><b>Guidance</b><span>Dynamic exit signs; phone messages; radio for staff; routes for rescue teams.</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>The seven method steps</h3>
+        <div class="tbl"><table>
+          <tbody>
+            <tr><td class="n">1</td><td>Model the building: places with area and capacity, paths with length and effective width.</td></tr>
+            <tr><td class="n">2</td><td>Read sensors and turn readings into a risk index [3] and FED [4].</td></tr>
+            <tr><td class="n">3</td><td>Predict hazard arrival from the spread rate [6], [7], fitted live.</td></tr>
+            <tr><td class="n">4</td><td>Filter places above &theta;; edge cost = travel time at density + &alpha; &times; exposure.</td></tr>
+            <tr><td class="n">5</td><td>Dijkstra to a virtual exit node; flow limits respected; most exposed groups planned first [4].</td></tr>
+            <tr><td class="n">6</td><td>Re-plan every &Delta;t; keep &gamma;-efficient alternative paths [8] and switch when jammed.</td></tr>
+            <tr><td class="n">7</td><td>Evaluate T50, T90, last person safe, dose and people reached by the hazard over repeated runs.</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Limits of this prototype</h3>
+      <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:4px">
+        <li>The hospital, people, sensors, drills and recordings are made up. Nothing here is a measurement of a real building.</li>
+        <li>The fire and smoke are a simple spread model (graph distance, door factors, growth and decay), not a CFD fire model. Its constants are assumed.</li>
+        <li>People move as a network flow (SFPE speed and density), not as individual agents avoiding each other.</li>
+        <li>The live estimate assumes one fire origin and one spread speed; two separate fires would confuse it.</li>
+        <li>Calibration with one drill cannot separate walking speed from delay well; run-to-run spread is large.</li>
+        <li>Phone and sign behaviour (share of phones, compliance) are assumed values, to be replaced by survey or drill data.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  This prototype supports planning, teaching and research. It does not replace a hospital's official emergency procedures or fire-safety professionals.
+  Sources of every number are on the Parameters page.
+</footer>
+<div class="place-tip" id="placeTip" hidden></div>
+
+<script type="module" src="./app.js"></script>
