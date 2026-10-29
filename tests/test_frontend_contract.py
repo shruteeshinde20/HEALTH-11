@@ -5,7 +5,8 @@ Covers the Facility Manager and the onboarding wizard (Phase 10, group 1) and
 the Graph Builder and Scenario Builder (group 2), and Live Simulation and
 Algorithm Comparison (group 3), and Patients & Staff, AI Assistant and Reports &
 History (group 4), and Admin and Settings / Profile (group 5), and the
-patients and staff CSV import and export.
+patients and staff CSV import and export, and the evacuation plans on the
+Reports & History page.
 """
 
 import pytest
@@ -585,3 +586,39 @@ def test_settings_requests(client):
     stored = call(client, h, "GET", "/parameters", 200, params={"limit": 200, "offset": 0}).json()["items"]
     assert [(p["name"], p["value"], p["source"]) for p in stored] == [(spec["name"], "0.75", "Local drill 2026")]
     assert call(client, h, "DELETE", f"/parameters/{saved['id']}", 204).content == b""
+
+
+def test_evacuation_plan_requests(client):
+    h = admin(client)
+    building, _ground, _places, scenario = _site_with_people(client, h)
+    run_id = call(client, h, "POST", "/simulate", 201, json={
+        "scenario_id": scenario["id"], "algorithm": "astar", "building_id": building["id"]}).json()["run_id"]
+
+    # SavePlan: POST {run_id, name} (name trimmed by the page, 200 characters at most).
+    plan = call(client, h, "POST", "/evacuation_plans", 201, json={
+        "run_id": run_id, "name": "Live drill – plan from run 1"}).json()
+    # PlansCard: the list with paging and the status filter (status left out for "All plans").
+    listed = call(client, h, "GET", "/evacuation_plans", 200, params={"limit": 20, "offset": 0}).json()
+    row = listed["items"][0]
+    assert set(row) >= {"id", "name", "status", "scenario_id", "scenario_name", "total", "evacuated",
+                        "needs_assistance", "evacuation_time_s", "approved_by", "approved_at", "updated_at"}
+    assert row["status"] == "draft" and row["scenario_name"] == "Live drill"
+    assert call(client, h, "GET", "/evacuation_plans", 200,
+                params={"limit": 20, "offset": 0, "status": "approved"}).json()["total"] == 0
+    # PlanDetails: everything the plan view shows.
+    detail = call(client, h, "GET", f"/evacuation_plans/{plan['id']}", 200).json()
+    assert set(detail) >= {"hazards", "instructions", "exit_load", "bottlenecks", "recommendations",
+                           "algorithm", "source_run_id", "run_created_at"}
+    item = detail["instructions"][0]
+    assert set(item) >= {"start", "kind", "mobility", "people", "route", "exit", "needs_assistance", "last_out_s"}
+    assert item["route"] == ["Ward A", "C1", "Exit 1"] and item["people"] == 3
+    assert detail["exit_load"] == {"Exit 1": 3}
+    # Status buttons send PATCH {status}; Delete uses DeleteConfirm.
+    for to in ("approved", "archived", "draft"):
+        assert call(client, h, "PATCH", f"/evacuation_plans/{plan['id']}", 200,
+                    json={"status": to}).json()["status"] == to
+    # A duplicate name comes back as a form error (409 with a message).
+    conflict = call(client, h, "POST", "/evacuation_plans", 409, json={
+        "run_id": run_id, "name": "Live drill – plan from run 1"}).json()
+    assert conflict["error"]["message"] == "An evacuation plan with this name already exists"
+    assert call(client, h, "DELETE", f"/evacuation_plans/{plan['id']}", 204).content == b""

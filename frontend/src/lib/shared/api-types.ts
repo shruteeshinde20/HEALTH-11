@@ -275,3 +275,47 @@ export type AuditEntry = {
 /** GET /parameters and GET /parameters/specs. */
 export type StoredParameter = { id: number; name: string; value: string; unit: string | null; source: string };
 export type ParameterSpec = { name: string; default: number; unit: string; minimum: number; maximum: number; meaning: string };
+
+/** GET /evacuation_plans (one row). */
+export type EvacuationPlanSummary = {
+  id: number;
+  name: string;
+  status: "draft" | "approved" | "archived";
+  scenario_id: number;
+  scenario_name: string | null;
+  source_run_id: number | null;
+  algorithm: string | null;
+  total: number | null;
+  evacuated: number | null;
+  needs_assistance: number | null;
+  evacuation_time_s: number | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** One instruction of a plan: who starts where and which way they go. */
+export type PlanInstruction = {
+  start_node_id: number;
+  start: string;
+  kind: string | null;
+  mobility: string | null;
+  route_node_ids: number[];
+  route: string[];
+  exit: string | null;
+  needs_assistance: boolean;
+  people: number;
+  last_out_s: number | null;
+};
+
+/** GET /evacuation_plans/{id}, and the answer to POST and PATCH. */
+export type EvacuationPlan = EvacuationPlanSummary & {
+  building_id: number | null;
+  run_created_at: string | null;
+  hazards: { name: string; type: string; origin: string | null; severity: number; starts_at_s: number }[];
+  instructions: PlanInstruction[];
+  exit_load: Record<string, number>;
+  bottlenecks: Bottleneck[];
+  recommendations: { severity: string; text: string }[];
+};

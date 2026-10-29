@@ -136,6 +136,15 @@ recommendations. Each run can be downloaded as a **PDF** or **CSV** report
 accuracy and the safety notice). **Estimate without simulating** uses the
 evacuation-time predictor, with **About this prediction**.
 
+**Evacuation plans.** **Save as plan** on a finished run keeps a copy of that
+run as a plan: for each starting place and type of person, the route to take
+by place names and the exit, who needs assisted evacuation, people per exit,
+bottlenecks and recommendations. Later changes to the run or the floor plan
+do not change a saved plan. A plan starts as a **Draft**; Emergency
+Commanders and Administrators can **Approve** it (who and when is recorded),
+**Archive** it, put it **Back to draft** or delete it. **Open** shows the plan,
+and **Print** prints it. Staff Users can read plans.
+
 ### Admin (Administrators only)
 **Users**: add, edit, change roles, deactivate. **Audit log**: every create,
 update and delete, every login and failed login in your organization, with
