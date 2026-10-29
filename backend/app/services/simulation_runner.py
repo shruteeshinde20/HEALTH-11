@@ -26,6 +26,8 @@ PARAMETERS = [
     "speed_ventilator_m_per_s", "simulation_tick_seconds", "simulation_max_minutes",
     "simulation_frame_seconds", "hazard_risk_horizon_minutes", "hazard_risk_cost_metres",
     "smoke_blocking_severity", "bottleneck_queue_minutes", "exit_imbalance_share",
+    "crowd_model_enabled", "crowd_boundary_layer_m", "crowd_max_density_per_m2",
+    "crowd_min_speed_fraction",
 ]
 
 METHOD = [
@@ -34,12 +36,17 @@ METHOD = [
     "Deterministic: the same inputs give the same result. Not machine learning.",
     "Congestion: each corridor (edge) lets at most max_flow people per minute in; others "
     "wait in arrival order.",
+    "Crowd model (when crowd_model_enabled is 1): a corridor also lets in at most about 1.32 "
+    "people per second per metre of usable width (1.02 on stairs), people walk side by side, "
+    "slow down when the corridor is crowded (SFPE speed-density relation, NIST TN 1722) and "
+    "move slower on stairs; a corridor holds at most crowd_max_density_per_m2 people per "
+    "square metre.",
     "Hazards spread on the simulation clock. When a node on someone's route becomes "
     "unusable they re-route; in a corridor they continue or turn back, whichever is safer.",
     "Outcomes: evacuated (reached an exit), needs_assistance (no safe route), "
     "reached_by_hazard. Nobody counts as evacuated without reaching an exit.",
-    "Limits: no pre-movement delay, crowd density or overtaking in corridors, node "
-    "capacity, slower stair speeds or staff helping patients. Speeds and other numbers are "
+    "Limits: no pre-movement delay, overtaking within a lane, node capacity or staff "
+    "helping patients. Speeds and other numbers are "
     "listed under parameters_used with their source. For planning and training only; "
     "this does not replace official emergency procedures or fire-safety professionals.",
 ]
@@ -136,6 +143,12 @@ def settings_from(values: dict[str, float]) -> ModelSettings:
         horizon_minutes=values["hazard_risk_horizon_minutes"],
         risk_cost_metres=values["hazard_risk_cost_metres"],
         smoke_blocking_severity=values["smoke_blocking_severity"],
+        # Runs saved before the crowd model existed have no crowd values: they
+        # are replayed (for example when a hazard is added) as they were made.
+        crowd_model=values.get("crowd_model_enabled", 0.0) >= 0.5,
+        boundary_layer_m=values.get("crowd_boundary_layer_m", 0.15),
+        max_density_per_m2=values.get("crowd_max_density_per_m2", 3.55),
+        min_speed_fraction=values.get("crowd_min_speed_fraction", 0.15),
     )
 
 

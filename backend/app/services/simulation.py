@@ -19,9 +19,25 @@ Model
   the node they were walking to). Nobody counts as evacuated unless they
   reached an exit.
 
-Limits: no overtaking or crowd density effects inside corridors, no node
-capacity limits, no stairs speed reduction, no staff helping patients, no
-pre-movement (alarm) delay. One tick moves each agent at most one edge end.
+- Crowd model (on when ModelSettings.crowd_model is true; the website's
+  default, parameter crowd_model_enabled). It uses the SFPE hydraulic
+  relations as restated in NIST Technical Note 1722:
+  * effective width = path width minus a boundary layer on each side;
+  * a path lets in at most k / (4a) people per second per metre of
+    effective width (about 1.32 on level floors, 1.02 on stairs), so a wide
+    corridor admits several people at once; its max_flow still caps this;
+  * walking speed falls with density D (people per m2 on the path):
+    v = v_free * (1 - aD) / (1 - a * 0.54) above 0.54 people/m2, never below
+    min_speed_fraction of v_free; a = 0.266;
+  * a path holds at most max_density_per_m2 * length * effective width people;
+  * on a flight of stairs (a path between two stair places) people move at
+    k_stairs / k_level = 1.08 / 1.40 of their level speed;
+  * people walk side by side in lanes across the effective width (positions).
+  With the crowd model off, the model above the list is used unchanged.
+
+Limits: no overtaking within a lane, no node capacity limits, no staff
+helping patients, no pre-movement (alarm) delay. One tick moves each agent at
+most one edge end.
 """
 
 import math
@@ -44,6 +60,14 @@ REACHED_BY_HAZARD = "reached_by_hazard"
 MAX_AGENTS = 5000
 EPSILON = 1e-9  # absorbs floating-point rounding when adding up steps
 STRANDED_REASON = "No safe route from here. Plan an assisted evacuation"
+
+# SFPE hydraulic model constants (NIST TN 1722): speed S = k (1 - a D).
+SFPE_A = 0.266
+SFPE_K_LEVEL = 1.40
+SFPE_K_STAIRS = 1.08
+FREE_FLOW_DENSITY = 0.54   # people/m2; below this people walk at their free speed
+MIN_EFFECTIVE_WIDTH_M = 0.3
+LANE_WIDTH_M = 0.6         # one person's shoulder width, for drawing lanes only
 
 
 @dataclass
@@ -79,6 +103,10 @@ class ModelSettings:
     horizon_minutes: float
     risk_cost_metres: float
     smoke_blocking_severity: float
+    crowd_model: bool = False
+    boundary_layer_m: float = 0.15
+    max_density_per_m2: float = 3.55
+    min_speed_fraction: float = 0.15
 
 
 class Simulation:
@@ -111,10 +139,17 @@ class Simulation:
         )
 
         self.queues: dict[int, list[Agent]] = {}
+        stair_ids = {n.id for n in self.nodes if _value(n.type) == "stair"}
+        self.stair_edges = frozenset(
+            e.id for e in self.edges if e.from_node_id in stair_ids and e.to_node_id in stair_ids)
+        # People per second that may enter each path, and how many it holds.
+        self.flow_rate: dict[int, float] = {edge.id: self._flow_rate(edge) for edge in self.edges}
+        self.max_occupancy: dict[int, int | None] = {edge.id: self._max_occupancy(edge) for edge in self.edges}
+        self.on_edge_count: dict[int, int] = {edge.id: 0 for edge in self.edges}
         # Each corridor starts with a full allowance, so the first person
         # walks straight into an empty corridor.
         self.allowance: dict[int, float] = {
-            edge.id: max(1.0, edge.max_flow / 60.0 * settings.tick_seconds) for edge in self.edges
+            edge.id: max(1.0, self.flow_rate[edge.id] * settings.tick_seconds) for edge in self.edges
         }
         self.edge_stats = {edge.id: {"people": 0, "wait": 0.0, "max_queue": 0, "max_wait": 0.0}
                            for edge in self.edges}
@@ -133,6 +168,40 @@ class Simulation:
         ]
         for agent in self.agents:
             self._start(agent)
+
+    # --- crowd model -----------------------------------------------------------
+
+    def effective_width(self, edge: Any) -> float:
+        width = float(getattr(edge, "width", 0.0) or 0.0)
+        return max(width - 2 * self.settings.boundary_layer_m, MIN_EFFECTIVE_WIDTH_M)
+
+    def _flow_rate(self, edge: Any) -> float:
+        configured = edge.max_flow / 60.0
+        if not self.settings.crowd_model:
+            return configured
+        k = SFPE_K_STAIRS if edge.id in self.stair_edges else SFPE_K_LEVEL
+        return min(configured, k / (4 * SFPE_A) * self.effective_width(edge))
+
+    def _max_occupancy(self, edge: Any) -> int | None:
+        if not self.settings.crowd_model or float(edge.distance) <= 0:
+            return None
+        area = float(edge.distance) * self.effective_width(edge)
+        return max(1, math.floor(self.settings.max_density_per_m2 * area + EPSILON))
+
+    def speed_factor(self, edge: Any, people_on_edge: int) -> float:
+        """Share of free walking speed on this path with this many people on it."""
+        if not self.settings.crowd_model:
+            return 1.0
+        factor = 1.0
+        length = float(edge.distance)
+        if length > 0 and people_on_edge > 0:
+            density = people_on_edge / (length * self.effective_width(edge))
+            if density > FREE_FLOW_DENSITY:
+                factor = (1 - SFPE_A * density) / (1 - SFPE_A * FREE_FLOW_DENSITY)
+        factor = max(factor, self.settings.min_speed_fraction)
+        if edge.id in self.stair_edges:
+            factor *= SFPE_K_STAIRS / SFPE_K_LEVEL
+        return factor
 
     # --- hazards ------------------------------------------------------------
 
@@ -290,16 +359,25 @@ class Simulation:
         """Let waiting people into corridors, first come first served."""
         dt = self.settings.tick_seconds
         for edge in self.edges:
-            rate = edge.max_flow / 60.0 * dt
-            self.allowance[edge.id] = min(self.allowance[edge.id] + rate, max(1.0, rate))
+            rate = self.flow_rate[edge.id] * dt
             queue = self.queues.get(edge.id)
+            cap = max(1.0, rate)
+            if self.settings.crowd_model and queue:
+                # Keep the unused part of a person while people are waiting, so a
+                # rate of 0.79 or 2.76 people per second is kept on average.
+                left = self.allowance[edge.id]
+                cap += left - math.floor(left + EPSILON)
+            self.allowance[edge.id] = min(self.allowance[edge.id] + rate, cap)
             if not queue:
                 continue
             queue.sort(key=lambda a: (a.queued_at, a.order))
             stats = self.edge_stats[edge.id]
             stats["max_queue"] = max(stats["max_queue"], len(queue))
-            while queue and self.allowance[edge.id] >= 1.0 - EPSILON and queue[0].queued_at <= self.t:
+            limit = self.max_occupancy[edge.id]
+            while queue and self.allowance[edge.id] >= 1.0 - EPSILON and queue[0].queued_at <= self.t \
+                    and (limit is None or self.on_edge_count[edge.id] < limit):
                 agent = queue.pop(0)
+                self.on_edge_count[edge.id] += 1
                 self.allowance[edge.id] -= 1.0
                 waited = self.t - agent.queued_at
                 agent.wait += waited
@@ -318,12 +396,14 @@ class Simulation:
         self._apply_hazard_changes()
         self._admit()
 
+        crowd = dict(self.on_edge_count)  # people on each path at the start of this tick
         for agent in self.agents:
             if agent.status != ACTIVE:
                 continue
             if agent.on_edge:
-                move = min(agent.speed * dt, max(agent.edge_length - agent.progress, 0.0))
-                agent.progress += agent.speed * dt
+                speed = agent.speed * self.speed_factor(self.edge_by_id[agent.edge_id], crowd[agent.edge_id])
+                move = min(speed * dt, max(agent.edge_length - agent.progress, 0.0))
+                agent.progress += speed * dt
                 agent.distance += move
                 agent.risk_exposure += dt * max(self.hazard.risk(agent.path[0]),
                                                 self.hazard.risk(agent.path[1]))
@@ -334,6 +414,7 @@ class Simulation:
         for agent in self.agents:
             if agent.status != ACTIVE or not agent.on_edge or agent.progress < agent.edge_length - EPSILON:
                 continue
+            self.on_edge_count[agent.edge_id] -= 1
             agent.on_edge = False
             agent.path = agent.path[1:]
             node_id = agent.path[0]
@@ -378,6 +459,16 @@ class Simulation:
             share = 1.0 if agent.edge_length <= 0 else min(agent.progress / agent.edge_length, 1.0)
             x = here.x + (ahead.x - here.x) * share
             y = here.y + (ahead.y - here.y) * share
+            if self.settings.crowd_model and agent.edge_id is not None:
+                # Side by side: spread people over lanes across the usable width.
+                width = self.effective_width(self.edge_by_id[agent.edge_id])
+                lanes = max(1, math.floor(width / LANE_WIDTH_M))
+                dx, dy = ahead.x - here.x, ahead.y - here.y
+                norm = math.hypot(dx, dy)
+                if lanes > 1 and norm > 0:
+                    offset = ((agent.order % lanes) - (lanes - 1) / 2) * (width / lanes)
+                    x += -dy / norm * offset
+                    y += dx / norm * offset
             floor_id = ahead.floor_id if share >= 0.5 else here.floor_id
         return {"id": agent.id, "x": round(x, 3), "y": round(y, 3), "floor_id": floor_id,
                 "mobility": agent.mobility, "status": agent.status}

@@ -14,17 +14,17 @@ node,Pharmacy,room,52,28,6,false,false,8,8,,,,,,,
 node,Main Exit,exit,35,33,0,false,false,3,2,,,,,,,
 node,East Exit,exit,66,20,0,false,false,2,3,,,,,,,
 node,Assembly Point,assembly,35,45,0,false,false,10,10,,,,,,,
-edge,,,,,,false,,,,Corridor West,Corridor Centre,20.0,2.4,60,true,true
-edge,,,,,,false,,,,Corridor Centre,Corridor East,20.0,2.4,60,true,true
-edge,,,,,,false,,,,Stair West,Corridor West,12.0,1.5,40,false,false
-edge,,,,,,false,,,,Stair East,Corridor East,10.6,1.5,40,false,false
-edge,,,,,,false,,,,Ward A,Corridor West,9.4,2.4,60,true,true
-edge,,,,,,false,,,,ICU,Corridor Centre,13.6,2.4,60,true,true
-edge,,,,,,false,,,,Ward B,Corridor Centre,8.5,2.4,60,true,true
-edge,,,,,,false,,,,Operating Theatre,Corridor East,8.5,2.4,60,true,true
-edge,,,,,,false,,,,Emergency,Corridor West,8.5,2.4,60,true,true
-edge,,,,,,false,,,,Reception,Corridor Centre,8.0,2.4,60,true,true
-edge,,,,,,false,,,,Pharmacy,Corridor East,8.5,2.4,60,true,true
-edge,,,,,,false,,,,Main Exit,Reception,5.0,2.4,60,true,true
-edge,,,,,,false,,,,Main Exit,Assembly Point,12.0,2.4,60,true,true
-edge,,,,,,false,,,,East Exit,Corridor East,11.0,2.4,60,true,true
+edge,,,,,,false,,,,Corridor West,Corridor Centre,20.0,2.4,165,true,true
+edge,,,,,,false,,,,Corridor Centre,Corridor East,20.0,2.4,165,true,true
+edge,,,,,,false,,,,Stair West,Corridor West,12.0,1.5,94,false,false
+edge,,,,,,false,,,,Stair East,Corridor East,10.6,1.5,94,false,false
+edge,,,,,,false,,,,Ward A,Corridor West,9.4,2.4,165,true,true
+edge,,,,,,false,,,,ICU,Corridor Centre,13.6,2.4,165,true,true
+edge,,,,,,false,,,,Ward B,Corridor Centre,8.5,2.4,165,true,true
+edge,,,,,,false,,,,Operating Theatre,Corridor East,8.5,2.4,165,true,true
+edge,,,,,,false,,,,Emergency,Corridor West,8.5,2.4,165,true,true
+edge,,,,,,false,,,,Reception,Corridor Centre,8.0,2.4,165,true,true
+edge,,,,,,false,,,,Pharmacy,Corridor East,8.5,2.4,165,true,true
+edge,,,,,,false,,,,Main Exit,Reception,5.0,2.4,165,true,true
+edge,,,,,,false,,,,Main Exit,Assembly Point,12.0,2.4,165,true,true
+edge,,,,,,false,,,,East Exit,Corridor East,11.0,2.4,165,true,true

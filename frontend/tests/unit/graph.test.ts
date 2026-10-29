@@ -21,3 +21,14 @@ test("number fields: empty, valid, out of range", () => {
   assert.ok(Number.isNaN(parseNumber("abc", 0, 10)));
   assert.equal(hazardName("smoke", "Ward A"), "Smoke at Ward A");
 });
+
+test("capacity suggested from a path's width (SFPE, 1.3158 people/s per usable metre)", async () => {
+  const { suggestedMaxFlow } = await import("../../src/lib/shared/graph.ts");
+  assert.equal(suggestedMaxFlow(2.4), 165);   // 2.1 m usable x 1.3158 x 60 = 165.8
+  assert.equal(suggestedMaxFlow(1.5), 94);    // 1.2 m usable
+  assert.equal(suggestedMaxFlow(0.9), 47);    // 0.6 m usable
+  assert.equal(suggestedMaxFlow(0.2), 23);    // never below 0.3 m usable
+  assert.equal(suggestedMaxFlow(0), null);
+  assert.equal(suggestedMaxFlow(null), null);
+  assert.equal(suggestedMaxFlow(Number.NaN), null);
+});

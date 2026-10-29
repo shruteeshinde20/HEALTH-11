@@ -38,3 +38,15 @@ export function parseNumber(value: string, min: number, max: number, integer = f
   }
   return number;
 }
+
+/**
+ * Capacity suggested from a path's width (people per minute), from the SFPE
+ * hydraulic model (NIST TN 1722): about 1.32 people per second per metre of
+ * usable width on level floors, with 0.15 m lost at each side. The same rule
+ * the simulator's crowd model uses; the user can still type another value.
+ */
+export function suggestedMaxFlow(widthMetres: number | null, boundaryLayerMetres = 0.15): number | null {
+  if (widthMetres === null || !Number.isFinite(widthMetres) || widthMetres <= 0) return null;
+  const usable = Math.max(widthMetres - 2 * boundaryLayerMetres, 0.3);
+  return Math.max(1, Math.floor((1.4 / (4 * 0.266)) * usable * 60));
+}

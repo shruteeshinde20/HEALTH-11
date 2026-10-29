@@ -11,7 +11,7 @@ import { useAction } from "@/lib/client/use-action.ts";
 import type { Floor, GraphEdge, GraphNode } from "@/lib/shared/api-types.ts";
 import { describeError } from "@/lib/shared/errors.ts";
 import { NODE_TYPES } from "@/lib/shared/files.ts";
-import { isVertical, parseNumber } from "@/lib/shared/graph.ts";
+import { isVertical, parseNumber, suggestedMaxFlow } from "@/lib/shared/graph.ts";
 import { readSize } from "@/lib/shared/place-size.ts";
 
 import { Buttons, Field, FormError } from "./facility-forms.tsx";
@@ -129,6 +129,7 @@ export function PathForm({ fromId, toId, path, label, onSaved, onCancel }: {
   const distanceValue = parseNumber(distance, 0, Number.MAX_VALUE);
   const widthValue = parseNumber(width, Number.MIN_VALUE, Number.MAX_VALUE);
   const flowValue = parseNumber(maxFlow, 1, MAX_COUNT, true);
+  const suggestedFlow = suggestedMaxFlow(widthValue !== null && !Number.isNaN(widthValue) ? widthValue : null);
   const ok = (value: number | null) => value !== null && !Number.isNaN(value);
   const complete = ok(distanceValue) && ok(widthValue) && ok(flowValue);
   const bad = (raw: string, value: number | null) => raw.trim() !== "" && Number.isNaN(value);
@@ -159,11 +160,19 @@ export function PathForm({ fromId, toId, path, label, onSaved, onCancel }: {
         <input id="path-width" type="number" min={0} step="any" required value={width}
                onChange={(e) => setWidth(e.target.value)} aria-invalid={bad(width, widthValue)} />
       </Field>
-      <Field id="path-flow" label="Capacity (people per minute)" hint="How many people can enter this path per minute."
+      <Field id="path-flow" label="Capacity (people per minute)"
+             hint={suggestedFlow === null
+               ? "How many people can enter this path per minute."
+               : `How many people can enter this path per minute. Suggested for this width: ${suggestedFlow} (SFPE: about 1.3 people per second per metre of usable width).`}
              error={fields.max_flow ?? (bad(maxFlow, flowValue) ? "Enter a whole number from 1 to 100,000." : undefined)}>
         <input id="path-flow" type="number" min={1} max={MAX_COUNT} step={1} required value={maxFlow}
                onChange={(e) => setMaxFlow(e.target.value)} aria-describedby="path-flow-hint"
                aria-invalid={bad(maxFlow, flowValue)} />
+        {suggestedFlow !== null && String(suggestedFlow) !== maxFlow.trim() && (
+          <button type="button" className="btn l mt-1" onClick={() => setMaxFlow(String(suggestedFlow))}>
+            Use {suggestedFlow} people per minute
+          </button>
+        )}
       </Field>
       <label className="flex items-center gap-2 text-tx">
         <input type="checkbox" className="w-auto" checked={wheelchair} onChange={(e) => setWheelchair(e.target.checked)} />

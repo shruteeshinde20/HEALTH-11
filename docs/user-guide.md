@@ -113,6 +113,13 @@ run**: everyone still inside is re-routed around it (dynamic re-routing).
 People with no safe route to any exit are counted under **Need assisted
 evacuation**, so staff can plan to help them.
 
+**Crowds.** Several people can be in a corridor at once and walk side by
+side: how many enter per second depends on the corridor's usable width, and
+everyone slows down when it gets crowded or on stairs (the SFPE crowd model,
+explained under Settings / Profile, where it can be switched off). In the Graph
+Builder, a path's capacity is suggested from its width; the example floor
+files use these suggested values.
+
 ### Algorithm Comparison
 Runs the same scenario with four ways of finding routes (BFS, DFS, Dijkstra
 and A*) and compares evacuation time, mean walking distance and risk

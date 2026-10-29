@@ -569,6 +569,20 @@ route becomes unsafe. Outcomes are `evacuated`, `needs_assistance` or
 dashboard shows an evacuation time only when everyone got out. The same inputs
 always give the same result; each run keeps a snapshot so it can be replayed.
 
+**Crowd model** (parameter `crowd_model_enabled`, on by default; SFPE hydraulic
+model as restated in NIST TN 1722). A path's usable width is its width minus
+`crowd_boundary_layer_m` (0.15 m) on each side. It lets in at most about
+1.32 people per second per usable metre (1.02 on a flight of stairs between
+two stair places), and never more than its `max_flow`, so a wide corridor
+admits several people at once and people walk side by side in lanes. Above
+0.54 people/m² everyone on the path slows down, `v = v_free (1 - 0.266 D) /
+(1 - 0.266 x 0.54)`, never below `crowd_min_speed_fraction` (0.15); a path
+holds at most `crowd_max_density_per_m2` (3.55) people per m²; stairs are
+walked at 1.08 / 1.40 of level speed. Set `crowd_model_enabled` to 0 in
+Settings / Profile for the simple model (one `max_flow` limit per path).
+The Graph Builder suggests a path's capacity from its width with the same
+rule. Runs saved before the crowd model existed are replayed without it.
+
 Each streamed frame has the people still inside (`positions`), the places
 that cannot be used (`blocked_nodes`), queues (`congested_edges`) and
 `hazards`: one row per place a hazard has reached (`types`, e.g. `["fire"]`)

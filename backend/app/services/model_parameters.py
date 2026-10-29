@@ -69,6 +69,25 @@ SPECS = {
             "Speed of a ventilated patient moved with bed and equipment.",
         ),
         ParameterSpec(
+            "crowd_model_enabled", 1.0, "1 = on, 0 = off", 0.0, 1.0,
+            "Crowd model: corridor flow from its usable width, people side by side, slower in "
+            "crowds and on stairs (SFPE hydraulic model, NIST TN 1722). 0 = one flow limit per path only.",
+        ),
+        ParameterSpec(
+            "crowd_boundary_layer_m", 0.15, "m", 0.0, 1.0,
+            "Width lost at each side of a path (walls, handrails) when working out its usable width "
+            "(SFPE: 0.15 m beside walls).",
+        ),
+        ParameterSpec(
+            "crowd_max_density_per_m2", 3.55, "people/m2", 0.5, 6.0,
+            "Most people that fit on one square metre of a path (Pathfinder SFPE mode: 3.55).",
+        ),
+        ParameterSpec(
+            "crowd_min_speed_fraction", 0.15, "fraction", 0.01, 1.0,
+            "In the densest crowd people still move at this share of their free speed "
+            "(Pathfinder SFPE mode: 0.15).",
+        ),
+        ParameterSpec(
             "simulation_tick_seconds", 1.0, "s", 0.1, 10.0,
             "Length of one simulation step.",
         ),
